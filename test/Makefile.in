@@ -34,6 +34,7 @@ SHELL = @SHELL@
 
 srcdir = @srcdir@
 abs_top_srcdir=@abs_top_srcdir@
+abs_srcdir = @abs_srcdir@
 VPATH = $(srcdir)
 
 FIND_DELETE = @FIND_DELETE@
@@ -85,7 +86,7 @@ EMACS_EXTRAOPT=
 # Command line flags for Emacs.
 # Apparently MSYS bash would convert "-L :" to "-L ;" anyway,
 # but we might as well be explicit.
-EMACSOPT = -batch -L "$(SEPCHAR)$(srcdir)" -L "$(SEPCHAR)$(C_SRCDIR)/.libs" -L "$(SEPCHAR)$(LISP_SRCDIR)" --module-assertions $(EMACS_EXTRAOPT)
+EMACSOPT = -batch -L "$(SEPCHAR)$(srcdir)" -L "$(SEPCHAR)$(abs_srcdir)/src" -L "$(SEPCHAR)$(C_SRCDIR)/.libs" -L "$(SEPCHAR)$(LISP_SRCDIR)" --module-assertions $(EMACS_EXTRAOPT)
 
 # Prevent any settings in the user environment causing problems.
 unexport EMACSDATA EMACSDOC EMACSPATH GREP_OPTIONS
@@ -174,7 +175,7 @@ endif
 SLOW_TESTS = 
 
 ELFILES := $(sort $(shell find ${srcdir} \
-		-name "*.el" ! -name ".*" -print))
+		-name "*.el" ! -name ".*" ! -name "test-config.el" -print))
 
 $(foreach slow,${SLOW_TESTS},$(eval ELFILES:= ${slow} $(filter-out ${slow},${ELFILES})))
 

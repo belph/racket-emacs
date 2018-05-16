@@ -115,7 +115,7 @@ AM_COND_IF([RACKET_GC_ISCGC_TST], [
 
 SECTION_TITLE([yellow], [Generating files])
 dnl Create Makefile
-AC_CONFIG_FILES([Makefile src/Makefile lisp/Makefile test/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile lisp/Makefile test/Makefile test/src/test-config.el])
 AC_OUTPUT
 
 AS_ECHO(["
