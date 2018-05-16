@@ -4,6 +4,8 @@
 *.o
 *.lo
 *.la
+*.elc
+*.log
 
 autom4te.cache
 aclocal.m4
@@ -14,6 +16,7 @@ depcomp
 .deps
 .dirstamp
 .libs
+include/re-config.*
 install-sh
 Makefile
 Makefile.in
@@ -23,3 +26,4 @@ libtool
 ltmain.sh
 m4/libtool.m4
 m4/lt*
+!test/Makefile.in

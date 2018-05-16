@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <re-config.h>
 #include <emacs-module.h>
 #include <scheme.h>
 #include <ctype.h>
+
+#include "racket-rt.h"
 //#include "base.c"
 
 /* Declare mandatory GPL symbol.  */
@@ -130,6 +133,7 @@ static __declspec(thread) void *tls_space;
 
 static int
 run_racket (int argc, char *argv[]) {
+  setenv("PLTSYSLOG", "debug", 1);
 #if defined(WIN32) && defined(USE_THREAD_LOCAL)
   scheme_register_tls_space(&tls_space, 0);
 #endif
@@ -403,18 +407,20 @@ int
 emacs_module_init (struct emacs_runtime *ert)
 {
   emacs_env *env = ert->get_environment (ert);
+  racket_main();
+  emacs_value fun = env->make_function(env, 1, 1, Feval_racket_file, "Evaluate the given racket file", NULL);
 
   /* create a lambda (returns an emacs_value) */
-  emacs_value fun = env->make_function (env,
-              0,            /* min. number of arguments */
-              0,            /* max. number of arguments */
-              Fmymod_test,  /* actual function pointer */
-              "doc",        /* docstring */
-              NULL          /* user pointer of your choice (data param in Fmymod_test) */
-  );
+  //emacs_value fun = env->make_function (env,
+  //            0,            /* min. number of arguments */
+  //            0,            /* max. number of arguments */
+  //            Fmymod_test,  /* actual function pointer */
+  //            "doc",        /* docstring */
+  //            NULL          /* user pointer of your choice (data param in Fmymod_test) */
+  //);
 
-  bind_function (env, "mymod-test", fun);
-  provide (env, "mymod");
+  bind_function (env, "eval-racket-file", fun);
+  provide (env, "libracketemacs");
 
   /* loaded successfully */
   return 0;

@@ -1,10 +1,11 @@
 AUTOMAKE_OPTIONS = foreign
-lib_MYMOD = libmymod.la
-lib_LTLIBRARIES = libmymod.la
-libmymod_la_SOURCES = mymod.c
+lib_RACKETEMACS = libracketemacs.la
+re_installdir=$(datarootdir)/emacs/site-lisp/racket-emacs
+re_install_LTLIBRARIES = libracketemacs.la
+libracketemacs_la_SOURCES = emacs-c-utils.c conv.c racket-rt.c mymod.c
 if NEEDS_EMACS_HEADER
-libmymod_la_CFLAGS = -I$(top_srcdir)/include-emacs -I$(top_srcdir)/include
+libracketemacs_la_CFLAGS = -I$(top_srcdir)/include-emacs -I$(top_srcdir)/include
 else
-libmymod_la_CFLAGS = -I$(top_srcdir)/include
+libracketemacs_la_CFLAGS = -I$(top_srcdir)/include
 endif
-libmymod_la_LDFLAGS = -version-info 0:0:0
+libracketemacs_la_LDFLAGS = -version-info 0:0:0
