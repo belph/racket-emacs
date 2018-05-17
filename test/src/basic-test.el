@@ -22,9 +22,15 @@
 
 (require 'ert)
 (require 'racket-emacs)
+(require 'test-config)
 
 (ert-deftest basic-test-require ()
   (should (require 'racket-emacs)))
+
+(ert-deftest basic-test-eval-racket-file ()
+  (let ((filename (racket-emacs-test-data-file "tst.rkt")))
+    (message "Loading Racket file: %s" filename)
+    (eval-racket-file filename)))
 
 ;;; basic-test.el ends here
 

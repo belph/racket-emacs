@@ -32,6 +32,14 @@
 
 #define STRLEN(x) ((sizeof(x) / sizeof(char)) - 1)
 
+#ifdef RE_DEBUG_GC
+#ifdef MZ_PRECISE_GC
+#undef MZ_GC_DECL_REG
+#define MZ_GC_DECL_REG(size) void *__gc_var_stack__[size+2] = { (void *)0, (void *)size }; fprintf(stderr, "%s __gc_var_stack__: %p\n", __func__, __gc_var_stack__)
+#endif // MZ_PRECISE_GC
+#endif // RE_DEBUG_GC
+
+
 #ifdef RKT_NEEDS_TLS_SPACE
 #if defined(_MSC_VER)
 static __declspec(thread) void *tls_space;
@@ -108,8 +116,8 @@ static int wrapped_emacs_value_fixup_proc(void *obj) {
 #endif // MZ_PRECISE_GC
 
 static emacs_env *get_current_emacs_env() {
-  Scheme_Config *config;
-  Scheme_Object *obj;
+  Scheme_Config *config = NULL;
+  Scheme_Object *obj = NULL;
   MZ_GC_DECL_REG(2);
   MZ_GC_VAR_IN_REG(0, config);
   MZ_GC_VAR_IN_REG(1, obj);
@@ -339,17 +347,43 @@ static inline void racket_setup_sandbox() {
 }
 
 static Scheme_Object *closed_dynamic_require(int argc, Scheme_Object **argv, Scheme_Object *prim) {
+  //fprintf(stderr, "Start closed_dynamic_require\n");
   Scheme_Object *a[2] = {NULL, NULL};
-  Scheme_Object *ret;
-  MZ_GC_DECL_REG(3);
+  Scheme_Object *ret = NULL;
+  Scheme_Object *curout = NULL;
+  Scheme_Config *config = NULL;
+  MZ_GC_DECL_REG(7);
   MZ_GC_ARRAY_VAR_IN_REG(0, a, 2);
-  MZ_GC_VAR_IN_REG(2, ret);
+  MZ_GC_VAR_IN_REG(3, ret);
+  MZ_GC_VAR_IN_REG(4, curout);
+  MZ_GC_VAR_IN_REG(5, config);
+  MZ_GC_VAR_IN_REG(6, prim);
   MZ_GC_REG();
   a[0] = SCHEME_PRIM_CLOSURE_ELS(prim)[0];
   a[1] = SCHEME_PRIM_CLOSURE_ELS(prim)[1];
+  //fprintf(stderr, "a[0] addr: %p\n", a[0]);
+  //fprintf(stderr, "a[1] addr: %p\n", a[1]);
+
+  //config = scheme_current_config();
+  //curout = scheme_get_param(config, MZCONFIG_OUTPUT_PORT);
+  //fprintf(stderr, "Pre-print 0:\n");
+  //scheme_display(a[0], curout);
+  //scheme_flush_output(curout);
+  //fprintf(stderr, "\nPre-print 1:\n");
+  //scheme_display(a[1], curout);
+  //scheme_flush_output(curout);
   MZ_GC_CHECK();
+
+  //fprintf(stderr, "\nPre-call\n");
+  //fprintf(stderr, "a[0] addr: %p\n", a[0]);
+  //fprintf(stderr, "a[1] addr: %p\n", a[1]);
+  //fprintf(stderr, "ret: %p\n", ret);
+  //fprintf(stderr, "curout: %p\n", curout);
+  //fprintf(stderr, "config: %p\n", config);
   ret = scheme_dynamic_require(2, a);
+  //fprintf(stderr, "Post-call\n");
   MZ_GC_UNREG();
+  //fprintf(stderr, "End closed_dynamic_require\n");
   return ret;
 }
 
@@ -449,21 +483,21 @@ static int racket_init(emacs_env *emacs_env) {
     initialized = true;
   }
   {
-    Scheme_Config	*config = NULL;
-    MZ_GC_DECL_REG(1);
-    MZ_GC_VAR_IN_REG(0, config);
-    MZ_GC_REG();
-    config = scheme_current_config();
-    MZ_GC_CHECK();
+    //Scheme_Config	*config = NULL;
+    //MZ_GC_DECL_REG(1);
+    //MZ_GC_VAR_IN_REG(0, config);
+    //MZ_GC_REG();
+    //config = scheme_current_config();
+    //MZ_GC_CHECK();
     /* recreate ports each call effectively clearing these ones */
-    curout = scheme_make_byte_string_output_port();
-    MZ_GC_CHECK();
-    curerr = scheme_make_byte_string_output_port();
-    MZ_GC_CHECK();
-    scheme_set_param(config, MZCONFIG_OUTPUT_PORT, curout);
-    MZ_GC_CHECK();
-    scheme_set_param(config, MZCONFIG_ERROR_PORT, curerr);
-    MZ_GC_UNREG();
+    //curout = scheme_make_byte_string_output_port();
+    //MZ_GC_CHECK();
+    //curerr = scheme_make_byte_string_output_port();
+    //MZ_GC_CHECK();
+    //scheme_set_param(config, MZCONFIG_OUTPUT_PORT, curout);
+    //MZ_GC_CHECK();
+    //scheme_set_param(config, MZCONFIG_ERROR_PORT, curerr);
+    //MZ_GC_UNREG();
   }
 
   return 0;
@@ -484,6 +518,7 @@ static void prepare_env(void *envptr) {
   ctxt->pre_env = value;
   value = wrap_emacs_env(ctxt->cur_env);
   scheme_set_param(config, emacs_env_param, value);
+  MZ_GC_UNREG();
 }
 
 static Scheme_Object *run_worker(void *envptr) {
@@ -527,11 +562,11 @@ static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
   Scheme_Object   *exn = NULL;
   Scheme_Object   *prim = NULL;
   Scheme_Object *a[2] = {NULL, NULL};
-  MZ_GC_DECL_REG(5);
+  MZ_GC_DECL_REG(6);
   MZ_GC_VAR_IN_REG(0, value);
   MZ_GC_VAR_IN_REG(1, exn);
   MZ_GC_VAR_IN_REG(2, prim);
-  MZ_GC_ARRAY_VAR_IN_REG(2, a, 3);
+  MZ_GC_ARRAY_VAR_IN_REG(3, a, 3);
   MZ_GC_REG();
 
   a[0] = scheme_make_pair(scheme_intern_symbol("file"),
@@ -541,7 +576,9 @@ static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
   
   prim = scheme_make_prim_closure_w_arity(closed_dynamic_require, 2, a, "closed-dynamic-require", 0, 0);
   MZ_GC_CHECK();
+  //fprintf(stderr, "Pre-apply thunk\n");
   value = _apply_thunk_catch_exceptions(prim, &exn);
+  //fprintf(stderr, "Post-apply thunk\n");
   MZ_GC_CHECK();
 
   if (!value) {
@@ -568,6 +605,8 @@ static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
 }
 
 static Scheme_Object *impossible(void *ptr) {
+  fprintf(stderr, "racket-emacs Fatal internal error: impossible() reached!\n");
+  fflush(stderr);
   abort();
   return NULL;
 }
@@ -575,6 +614,7 @@ static Scheme_Object *impossible(void *ptr) {
 emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
   char *filename = emacs_string_to_c_string(env, argv[0]);
   EMACS_CHECK_EXIT(env, NULL);
+  //fprintf(stderr, "Pre-init\n");
   if (racket_init(env)) {
     EMACS_CHECK_EXIT(env, NULL);
     emacs_value Qthrow_tag = env->intern(env, "racket-emacs");
@@ -583,6 +623,7 @@ emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[]
     env->non_local_exit_throw(env, Qthrow_tag, Qthrow_value);
     return NULL;
   }
+  //fprintf(stderr, "Post-init\n");
   Scheme_Object *res = NULL;
   filerun_info frinfo = { filename, &res };
   MZ_GC_DECL_REG(1);
@@ -697,6 +738,7 @@ static void register_emacs_exn() {
  * raise exn:emacs, may be with additional info string
  */
 void raise_emacs_exn(const char *add_info) {
+  //fprintf(stderr, "Calling: raise_emacs_exn(\"%s\")\n", add_info);
   char	    *fmt = "Emacs error: ~a";
   Scheme_Object   *argv[2] = {NULL, NULL};
   Scheme_Object   *exn = NULL;
