@@ -630,6 +630,7 @@ emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[]
   MZ_GC_VAR_IN_REG(0, res);
   MZ_GC_REG();
   with_env(env, do_eval_racket_file, impossible, &frinfo);
+  free(filename);
   MZ_GC_UNREG();
   return env->intern(env, "nil");
 }
