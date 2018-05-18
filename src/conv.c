@@ -59,11 +59,11 @@ Scheme_Object *conv_emacs_string_to_scheme_string(emacs_env *env, emacs_value va
 // Racket -> Emacs
 
 emacs_value conv_scheme_integer_to_emacs_integer(emacs_env *env, Scheme_Object *value) {
-  env->make_integer(env, (intmax_t)SCHEME_INT_VAL(value));
+  return env->make_integer(env, (intmax_t)SCHEME_INT_VAL(value));
 }
 
 emacs_value conv_scheme_float_to_emacs_float(emacs_env *env, Scheme_Object *value) {
-  env->make_float(env, SCHEME_DBL_VAL(value));
+  return env->make_float(env, SCHEME_DBL_VAL(value));
 }
 
 emacs_value conv_scheme_symbol_to_emacs_symbol(emacs_env *env, Scheme_Object *value) {

@@ -122,6 +122,19 @@
 #define TRAMPOLINED_RACKET_STARTUP
 #endif
 
+#define RACKET_INIT_RET(env, err_ret)                                   \
+  do {                                                                  \
+    emacs_env *__env = env;                                             \
+    if (racket_init(__env)) {                                           \
+      EMACS_CHECK_EXIT(__env, err_ret);                                 \
+      emacs_value Qthrow_tag = __env->intern(__env, "racket-emacs");    \
+      char msg[] = "Failed to initialize Racket runtime";               \
+      emacs_value Qthrow_value = __env->make_string(__env, msg, STRLEN(msg)); \
+      __env->non_local_exit_throw(__env, Qthrow_tag, Qthrow_value);     \
+      return err_ret;                                                   \
+    }                                                                   \
+  } while (0)
+  
 #define SCHEME_EMACSVALUEP(obj) SAME_TYPE(SCHEME_TYPE(obj), mz_emacs_type)
 #define SCHEME_EMACSENVP(obj) SAME_TYPE(SCHEME_TYPE(obj), mz_emacs_env_type)
 
@@ -130,14 +143,6 @@
 
 Scheme_Type mz_emacs_type;
 Scheme_Type mz_emacs_env_type;
-
-typedef struct {
-  Scheme_Object *pre_env;
-  emacs_env *cur_env;
-  Scheme_Object* (*worker_fun)(void*);
-  Scheme_Object* (*jump_handler)(void*);
-  void* data;
-} emacs_mz_env_ctxt;
 
 typedef struct {
   Scheme_Object so;
@@ -149,7 +154,9 @@ typedef struct {
   emacs_env *env;
 } emacs_mz_env;
 
+Scheme_Env *get_racket_env();
 emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data);
+int racket_init(emacs_env *env);
 int racket_main();
 
 #endif // RKT_EMACS_RACKET_RTSUPPORT_H

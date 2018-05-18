@@ -93,3 +93,54 @@ bool emacs_safe_intern(emacs_env *env, const char *name, size_t size, emacs_valu
   }
   return env->non_local_exit_check (env) == emacs_funcall_exit_return;
 }
+
+bool emacs_is_user_ptr(emacs_env *env, emacs_value value) {
+  emacs_value Quser_ptr = env->intern(env, "user-ptr");
+  EMACS_CHECK_EXIT(env, false);
+  emacs_value Qtyp = env->type_of(env, value);
+  EMACS_CHECK_EXIT(env, false);
+  return env->eq(env, Quser_ptr, Qtyp);
+}
+
+/* Bind NAME to VAL.  */
+void bind_value(emacs_env *env, const char *name, emacs_value Qval) {
+  /* Set the function cell of the symbol named NAME to QVAL using
+     the 'set' function.  */
+
+  /* Convert the strings to symbols by interning them */
+  emacs_value Qset = env->intern (env, "set");
+  emacs_value Qsym = env->intern (env, name);
+
+  /* Prepare the arguments array */
+  emacs_value args[] = { Qsym, Qval };
+
+  /* Make the call (2 == nb of arguments) */
+  env->funcall (env, Qset, 2, args);
+}
+
+/* Bind NAME to FUN.  */
+void bind_function(emacs_env *env, const char *name, emacs_value Sfun) {
+  /* Set the function cell of the symbol named NAME to SFUN using
+     the 'fset' function.  */
+
+  /* Convert the strings to symbols by interning them */
+  emacs_value Qfset = env->intern (env, "fset");
+  emacs_value Qsym = env->intern (env, name);
+
+  /* Prepare the arguments array */
+  emacs_value args[] = { Qsym, Sfun };
+
+  /* Make the call (2 == nb of arguments) */
+  env->funcall (env, Qfset, 2, args);
+}
+
+/* Provide FEATURE to Emacs.  */
+void provide(emacs_env *env, const char *feature) {
+  /* call 'provide' with FEATURE converted to a symbol */
+
+  emacs_value Qfeat = env->intern (env, feature);
+  emacs_value Qprovide = env->intern (env, "provide");
+  emacs_value args[] = { Qfeat };
+
+  env->funcall (env, Qprovide, 1, args);
+}

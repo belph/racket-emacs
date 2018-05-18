@@ -29,6 +29,8 @@
 #define RKT_EMACS_EMACS_C_UTILS_H
 #include <emacs-module.h>
 
+#define STRLEN(x) ((sizeof(x) / sizeof(char)) - 1)
+
 #define EMACS_CHECK_EXIT(env, retval)                                   \
   do {                                                                  \
     emacs_env *___eenv = env;                                           \
@@ -36,6 +38,24 @@
       return retval;                                                    \
     }                                                                   \
   } while (0)
+
+#define EMACS_CHECK_EXIT_UNREG(env, retval)                             \
+  do {                                                                  \
+    emacs_env *___eenv = env;                                           \
+    if (___eenv->non_local_exit_check(___eenv) != emacs_funcall_exit_return) { \
+      MZ_GC_UNREG();                                                    \
+      return retval;                                                    \
+    }                                                                   \
+  } while (0)
+
+// Creates an emacs_value string from the given constant
+#define EMACS_STRING(env, s) \
+  ({                                                     \
+    emacs_env *___eenv = env;                            \
+    char __s[] = "" s; /* force to be string literal */  \
+    ptrdiff_t __len = STRLEN(__s);                       \
+    ___eenv->make_string(___eenv, __s, __len);           \
+  })
 
 /**
  * @brief Convert an Emacs string to a C string and save its size
@@ -74,5 +94,26 @@ emacs_value emacs_symbol_name(emacs_env *env, emacs_value sym);
  * @return 
  */
 bool emacs_safe_intern(emacs_env *env, const char *name, size_t size, emacs_value *result);
+
+/**
+ * @brief Check whether the given value is an Emacs user pointer
+ * @return Whether it is a user pointer
+ */
+bool emacs_is_user_ptr(emacs_env *env, emacs_value value);
+
+/**
+ * @brief Bind NAME to VAL.
+ */
+void bind_value(emacs_env *env, const char *name, emacs_value Qval);
+
+/**
+ * @brief Bind NAME to FUN.
+ */
+void bind_function(emacs_env *env, const char *name, emacs_value Sfun);
+
+/**
+ * @brief Provide FEATURE to Emacs.
+ */
+void provide(emacs_env *env, const char *feature);
 
 #endif

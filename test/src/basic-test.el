@@ -32,6 +32,12 @@
     (message "Loading Racket file: %s" filename)
     (eval-racket-file filename)))
 
+(ert-deftest basic-test-load-symbol ()
+  (should (eval-racket-file (racket-emacs-test-data-file "tst.rkt") 'val)))
+
+(ert-deftest basic-test-raw-car ()
+  (should (eq (call-racket-func-raw racket-car racket-tst-list) 'firstval)))
+
 ;;; basic-test.el ends here
 
 

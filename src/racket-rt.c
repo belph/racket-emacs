@@ -26,6 +26,7 @@
 #include "emacs-c-utils.h"
 #include "conv.h"
 #include "racket-rt.h"
+#include "racket-rtutils.h"
 
 // A large portion of this file is taken from VIM's mzscheme (i.e. Racket) module,
 // as it addresses many nuances of portability and alternate Racket configurations.
@@ -55,13 +56,10 @@ static intptr_t _tls_index = 0;
 
 typedef struct {
   char *filename;
+  Scheme_Object *sym;
   Scheme_Object **res;
 } filerun_info;
 
-Scheme_Type mz_emacs_type;
-Scheme_Type mz_emacs_env_type;
-
-static int emacs_env_param;
 static bool initialized = false;
 static bool load_base_module_failed = false;
 
@@ -70,22 +68,10 @@ static Scheme_Env    *environment = NULL;
 /* output/error handlers */
 static Scheme_Object *curout = NULL;
 static Scheme_Object *curerr = NULL;
-/* exn:vim exception */
-static Scheme_Object *exn_catching_apply = NULL;
-static Scheme_Object *exn_p = NULL;
-static Scheme_Object *exn_message = NULL;
-static Scheme_Object *emacs_exn = NULL; /* Emacs Error exception */
 
 #if !defined(MZ_PRECISE_GC) || MZSCHEME_VERSION_MAJOR < 400
 static void *stack_base = NULL;
 #endif
-
-
-static void init_exn_catching_apply(void);
-static Scheme_Object *_apply_thunk_catch_exceptions(Scheme_Object*, Scheme_Object**);
-static Scheme_Object* extract_exn_message(Scheme_Object*);
-static void register_emacs_exn(void);
-void raise_emacs_exn(const char*);
 
 #ifdef MZ_PRECISE_GC
 
@@ -115,67 +101,9 @@ static int wrapped_emacs_value_fixup_proc(void *obj) {
 
 #endif // MZ_PRECISE_GC
 
-static emacs_env *get_current_emacs_env() {
-  Scheme_Config *config = NULL;
-  Scheme_Object *obj = NULL;
-  MZ_GC_DECL_REG(2);
-  MZ_GC_VAR_IN_REG(0, config);
-  MZ_GC_VAR_IN_REG(1, obj);
-  MZ_GC_REG();
-  config = scheme_current_config();
-  obj = scheme_get_param(config, emacs_env_param);
-  if (SCHEME_EMACSENVP(obj)) {
-    MZ_GC_UNREG();
-    return SCHEME_EMACSENV_DEREF(obj);
-  }
-  MZ_GC_UNREG();
-  raise_emacs_exn("Emacs environment parameter was required but undefined!");
-  // Won't reach
-  return NULL;
+Scheme_Env *get_racket_env() {
+  return environment;
 }
-
-static void wrapped_emacs_value_finalizer(void *p, void *data) {
-  if (SCHEME_EMACSVALUEP(p)) {
-    emacs_env *env = get_current_emacs_env();
-    env->free_global_ref(env, SCHEME_EMACSVALUE_DEREF(p));
-  }
-}
-
-Scheme_Object *wrap_emacs_value(emacs_env *env, emacs_value value) {
-  emacs_mz_value *self = NULL;
-  MZ_GC_DECL_REG(1);
-  MZ_GC_VAR_IN_REG(0, self);
-  MZ_GC_REG();
-  self = scheme_malloc_fail_ok(scheme_malloc_tagged, sizeof(emacs_mz_value));
-  memset(self, 0, sizeof(emacs_mz_value));
-  MZ_GC_CHECK();
-  self->value = env->make_global_ref(env, value);
-  self->so.type = mz_emacs_type;
-  scheme_register_finalizer(self, wrapped_emacs_value_finalizer, NULL, NULL, NULL);
-  MZ_GC_UNREG();
-  return (Scheme_Object*)self;
-}
-
-static Scheme_Object *wrap_emacs_env(emacs_env *env) {
-  emacs_mz_env *self = NULL;
-  MZ_GC_DECL_REG(1);
-  MZ_GC_VAR_IN_REG(0, self);
-  MZ_GC_REG();
-  self = scheme_malloc_fail_ok(scheme_malloc_tagged, sizeof(emacs_mz_env));
-  memset(self, 0, sizeof(emacs_mz_env));
-  MZ_GC_CHECK();
-  self->env = env;
-  self->so.type = mz_emacs_env_type;
-  MZ_GC_UNREG();
-  return (Scheme_Object*)self;
-}
-
-emacs_value wrap_racket_value(emacs_env *env, Scheme_Object *value) {
-  scheme_dont_gc_ptr(value);
-  return env->make_user_ptr(env, scheme_gc_ptr_ok, value);
-}
-
-
 
 static int racket_env_main(Scheme_Env *env, int argc, char *argv[]) {
 #ifdef TRAMPOLINED_RACKET_STARTUP
@@ -199,7 +127,7 @@ static int racket_env_main(Scheme_Env *env, int argc, char *argv[]) {
 int racket_main() {
   int argc = 0;
   char *argv = NULL;
-  emacs_env_param = scheme_new_param();
+  //scheme_set_logging(SCHEME_LOG_FATAL, SCHEME_LOG_DEBUG);
 
 #ifdef RKT_NEEDS_TLS_SPACE
   scheme_register_tls_space(&tls_space, _tls_index);
@@ -409,10 +337,6 @@ static int racket_startup() {
   MZ_REGISTER_STATIC(environment);
   MZ_REGISTER_STATIC(curout);
   MZ_REGISTER_STATIC(curerr);
-  MZ_REGISTER_STATIC(exn_catching_apply);
-  MZ_REGISTER_STATIC(exn_p);
-  MZ_REGISTER_STATIC(exn_message);
-  MZ_REGISTER_STATIC(emacs_exn);
 
   MZ_GC_CHECK();
 
@@ -441,8 +365,7 @@ static int racket_startup() {
     }
   }
 
-  register_emacs_exn();
-  init_exn_catching_apply();
+  init_racket_rtutils();
   /* redirect output */
   //scheme_console_output = do_output;
   //scheme_console_printf = do_printf;
@@ -468,7 +391,7 @@ static int racket_startup() {
   return 0;
 }
 
-static int racket_init(emacs_env *emacs_env) {
+int racket_init(emacs_env *emacs_env) {
   if (!initialized) {
     if (load_base_module_failed || racket_startup()) {
       emacs_value Qthrow_tag = emacs_env->intern(emacs_env, "racket-emacs-init");
@@ -503,58 +426,6 @@ static int racket_init(emacs_env *emacs_env) {
   return 0;
 }
 
-static void prepare_env(void *envptr) {
-  emacs_mz_env_ctxt *ctxt = (emacs_mz_env_ctxt*)envptr;
-  Scheme_Config *config = NULL;
-  Scheme_Object *value = NULL;
-  MZ_GC_DECL_REG(2);
-  MZ_GC_VAR_IN_REG(0, config);
-  MZ_GC_VAR_IN_REG(1, value);
-  MZ_GC_REG();
-  config = scheme_current_config();
-  MZ_GC_CHECK();
-  value = scheme_get_param(config, emacs_env_param);
-  scheme_dont_gc_ptr(value);
-  ctxt->pre_env = value;
-  value = wrap_emacs_env(ctxt->cur_env);
-  scheme_set_param(config, emacs_env_param, value);
-  MZ_GC_UNREG();
-}
-
-static Scheme_Object *run_worker(void *envptr) {
-  emacs_mz_env_ctxt *ctxt = (emacs_mz_env_ctxt*)envptr;
-  return ctxt->worker_fun(ctxt->data);
-}
-
-static Scheme_Object *run_jump_handler(void *envptr) {
-  emacs_mz_env_ctxt *ctxt = (emacs_mz_env_ctxt*)envptr;
-  return ctxt->jump_handler(ctxt->data);
-}
-
-static void teardown_env(void *envptr) {
-  emacs_mz_env_ctxt *ctxt = (emacs_mz_env_ctxt*)envptr;
-  Scheme_Config *config = NULL;
-  Scheme_Object *value = NULL;
-  MZ_GC_DECL_REG(2);
-  MZ_GC_VAR_IN_REG(0, config);
-  MZ_GC_VAR_IN_REG(1, value);
-  MZ_GC_REG();
-  config = scheme_current_config();
-  MZ_GC_CHECK();
-  value = ctxt->pre_env;
-  scheme_gc_ptr_ok(value);
-  scheme_set_param(config, emacs_env_param, value);
-}
-
-static void *with_env(emacs_env *env, Scheme_Object* (*worker_fun)(void*), Scheme_Object* (*jump_handler)(void*), void *data) {
-  emacs_mz_env_ctxt ctxt;
-  ctxt.cur_env = env;
-  ctxt.worker_fun = worker_fun;
-  ctxt.jump_handler = jump_handler;
-  ctxt.data = data;
-  return scheme_dynamic_wind(prepare_env, run_worker, teardown_env, run_jump_handler, &ctxt);
-}
-
 static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
   filerun_info *frinfo = (filerun_info*)frinfo_ptr;
   char *filename = frinfo->filename;
@@ -572,7 +443,7 @@ static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
   a[0] = scheme_make_pair(scheme_intern_symbol("file"),
 			  scheme_make_pair(scheme_make_utf8_string(filename),
 					   scheme_null));
-  a[1] = scheme_make_false();
+  a[1] = frinfo->sym;
   
   prim = scheme_make_prim_closure_w_arity(closed_dynamic_require, 2, a, "closed-dynamic-require", 0, 0);
   MZ_GC_CHECK();
@@ -615,227 +486,23 @@ emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[]
   char *filename = emacs_string_to_c_string(env, argv[0]);
   EMACS_CHECK_EXIT(env, NULL);
   //fprintf(stderr, "Pre-init\n");
-  if (racket_init(env)) {
-    EMACS_CHECK_EXIT(env, NULL);
-    emacs_value Qthrow_tag = env->intern(env, "racket-emacs");
-    char msg[] = "Failed to initialize Racket runtime";
-    emacs_value Qthrow_value = env->make_string(env, msg, STRLEN(msg));
-    env->non_local_exit_throw(env, Qthrow_tag, Qthrow_value);
-    return NULL;
-  }
   //fprintf(stderr, "Post-init\n");
   Scheme_Object *res = NULL;
-  filerun_info frinfo = { filename, &res };
-  MZ_GC_DECL_REG(1);
+  filerun_info frinfo = { filename, NULL, &res };
+  
+  MZ_GC_DECL_REG(2);
   MZ_GC_VAR_IN_REG(0, res);
+  MZ_GC_VAR_IN_REG(1, frinfo.sym);
   MZ_GC_REG();
+  if (argc > 1) {
+    frinfo.sym = conv_emacs_symbol_to_scheme_symbol(env, argv[1]);
+  } else {
+    frinfo.sym = scheme_make_false();
+  }
   with_env(env, do_eval_racket_file, impossible, &frinfo);
   free(filename);
+  emacs_value ret = wrap_racket_value(env, *frinfo.res);
   MZ_GC_UNREG();
-  return env->intern(env, "nil");
+  return ret;
 }
 
-static int eval_racket_with_exn_handling(emacs_env *emacs_env, void *data, Scheme_Closed_Prim *what, Scheme_Object **ret) {
-  Scheme_Object   *value = NULL;
-  Scheme_Object   *exn = NULL;
-  Scheme_Object   *prim = NULL;
-
-  MZ_GC_DECL_REG(3);
-  MZ_GC_VAR_IN_REG(0, value);
-  MZ_GC_VAR_IN_REG(1, exn);
-  MZ_GC_VAR_IN_REG(2, prim);
-  MZ_GC_REG();
-
-  prim = scheme_make_closed_prim_w_arity(what, data, "racket-emacs", 0, 0);
-  MZ_GC_CHECK();
-  value = _apply_thunk_catch_exceptions(prim, &exn);
-  MZ_GC_CHECK();
-
-  if (!value) {
-    value = extract_exn_message(exn);
-    emacs_value Qthrow_tag = emacs_env->intern(emacs_env, "racket-emacs");
-    emacs_value Qthrow_value;
-    if (value) {
-      Qthrow_value = conv_scheme_string_to_emacs_string(emacs_env, value);
-      MZ_GC_CHECK();
-    } else {
-      Qthrow_value = emacs_env->intern(emacs_env, "nil");
-    }
-    if (emacs_env->non_local_exit_check(emacs_env) == emacs_funcall_exit_return) {
-      emacs_env->non_local_exit_throw(emacs_env, Qthrow_tag, Qthrow_value);
-    }
-    MZ_GC_UNREG();
-    return -1;
-  }
-
-  if (ret != NULL) {	/* if pointer to retval supported give it up */
-    *ret = value;
-  } else if (!SCHEME_VOIDP(value)) { /* Print any result, as long as it's not a void */
-    scheme_display(value, curout);  /* Send to stdout-vim */
-    MZ_GC_CHECK();
-  }
-
-  //do_flush();
-  MZ_GC_UNREG();
-  return 0;
-}
-
-
-static void register_emacs_exn() {
-  int nc = 0;
-  int i;
-  Scheme_Object   *struct_exn = NULL;
-  Scheme_Object   *exn_name = NULL;
-
-  MZ_GC_DECL_REG(2);
-  MZ_GC_VAR_IN_REG(0, struct_exn);
-  MZ_GC_VAR_IN_REG(1, exn_name);
-  MZ_GC_REG();
-
-  exn_name = scheme_intern_symbol("exn:emacs");
-  MZ_GC_CHECK();
-  struct_exn = scheme_builtin_value("struct:emacs");
-  MZ_GC_CHECK();
-
-  if (emacs_exn == NULL) {
-    emacs_exn = scheme_make_struct_type(exn_name,
-					struct_exn, NULL, 0, 0, NULL, NULL
-#if MZSCHEME_VERSION_MAJOR >= 299
-					, NULL
-#endif
-					);
-  }
-
-
-  {
-    Scheme_Object   **tmp = NULL;
-    Scheme_Object   *exn_names[5] = {NULL, NULL, NULL, NULL, NULL};
-    Scheme_Object   *exn_values[5] = {NULL, NULL, NULL, NULL, NULL};
-    MZ_GC_DECL_REG(6);
-    MZ_GC_ARRAY_VAR_IN_REG(0, exn_names, 5);
-    MZ_GC_ARRAY_VAR_IN_REG(3, exn_values, 5);
-    MZ_GC_REG();
-
-    tmp = scheme_make_struct_names(exn_name, scheme_null, 0, &nc);
-    memmove(exn_names, tmp, nc * sizeof(Scheme_Object *));
-    MZ_GC_CHECK();
-
-    tmp = scheme_make_struct_values(emacs_exn, exn_names, nc, 0);
-    memmove(exn_values, tmp, nc * sizeof(Scheme_Object *));
-    MZ_GC_CHECK();
-
-    for (i = 0; i < nc; i++)
-      {
-	scheme_add_global_symbol(exn_names[i],
-				 exn_values[i], environment);
-	MZ_GC_CHECK();
-      }
-    MZ_GC_UNREG();
-  }
-  MZ_GC_UNREG();
-}
-
-/*
- * raise exn:emacs, may be with additional info string
- */
-void raise_emacs_exn(const char *add_info) {
-  //fprintf(stderr, "Calling: raise_emacs_exn(\"%s\")\n", add_info);
-  char	    *fmt = "Emacs error: ~a";
-  Scheme_Object   *argv[2] = {NULL, NULL};
-  Scheme_Object   *exn = NULL;
-  Scheme_Object   *byte_string = NULL;
-
-  MZ_GC_DECL_REG(5);
-  MZ_GC_ARRAY_VAR_IN_REG(0, argv, 2);
-  MZ_GC_VAR_IN_REG(3, exn);
-  MZ_GC_VAR_IN_REG(4, byte_string);
-  MZ_GC_REG();
-
-  if (add_info != NULL) {
-    char *c_string = NULL;
-    Scheme_Object *info = NULL;
-
-    MZ_GC_DECL_REG(3);
-    MZ_GC_VAR_IN_REG(0, c_string);
-    MZ_GC_VAR_IN_REG(2, info);
-    MZ_GC_REG();
-
-    info = scheme_make_byte_string(add_info);
-    MZ_GC_CHECK();
-    c_string = scheme_format_utf8(fmt, (int)STRLEN(fmt), 1, &info, NULL);
-    MZ_GC_CHECK();
-    byte_string = scheme_make_byte_string(c_string);
-    MZ_GC_CHECK();
-    argv[0] = scheme_byte_string_to_char_string(byte_string);
-    SCHEME_SET_IMMUTABLE(argv[0]);
-    MZ_GC_UNREG();
-  } else {
-    byte_string = scheme_make_byte_string("Emacs error");
-    MZ_GC_CHECK();
-    argv[0] = scheme_byte_string_to_char_string(byte_string);
-    MZ_GC_CHECK();
-  }
-  MZ_GC_CHECK();
-
-#if MZSCHEME_VERSION_MAJOR < 360
-  argv[1] = scheme_current_continuation_marks();
-  MZ_GC_CHECK();
-#else
-  argv[1] = scheme_current_continuation_marks(NULL);
-  MZ_GC_CHECK();
-#endif
-
-  exn = scheme_make_struct_instance(emacs_exn, 2, argv);
-  MZ_GC_CHECK();
-  scheme_raise(exn);
-  MZ_GC_UNREG();
-}
-
-
-/*
- *========================================================================
- * Exception handling code -- cribbed form the MzScheme sources and
- * Matthew Flatt's "Inside PLT MzScheme" document.
- *========================================================================
- */
-static void init_exn_catching_apply() {
-  if (!exn_catching_apply) {
-    char *e =
-	    "(lambda (thunk) "
-              "(with-handlers ([void (lambda (exn) (cons #f exn))]) "
-                 "(cons #t (thunk))))";
-    exn_catching_apply = scheme_eval_string(e, environment);
-    MZ_GC_CHECK();
-    exn_p = scheme_builtin_value("exn?");
-    MZ_GC_CHECK();
-    exn_message = scheme_builtin_value("exn-message");
-    MZ_GC_CHECK();
-  }
-}
-
-/*
- * This function applies a thunk, returning the Scheme value if there's
- * no exception, otherwise returning NULL and setting *exn to the raised
- * value (usually an exn structure).
- */
-static Scheme_Object *_apply_thunk_catch_exceptions(Scheme_Object *f, Scheme_Object **exn) {
-  Scheme_Object *v;
-
-  v = _scheme_apply(exn_catching_apply, 1, &f);
-  /* v is a pair: (cons #t value) or (cons #f exn) */
-
-  if (SCHEME_TRUEP(SCHEME_CAR(v))) {
-    return SCHEME_CDR(v);
-  } else {
-    *exn = SCHEME_CDR(v);
-    return NULL;
-  }
-}
-
-static Scheme_Object* extract_exn_message(Scheme_Object *v) {
-  if (SCHEME_TRUEP(_scheme_apply(exn_p, 1, &v))) {
-    return _scheme_apply(exn_message, 1, &v);
-  } else {
-    return NULL; /* Not an exn structure */
-  }
-}
