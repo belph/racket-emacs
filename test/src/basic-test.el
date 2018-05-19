@@ -33,10 +33,21 @@
     (eval-racket-file filename)))
 
 (ert-deftest basic-test-load-symbol ()
-  (should (eval-racket-file (racket-emacs-test-data-file "tst.rkt") 'val)))
+  (let ((imported (eval-racket-file (racket-emacs-test-data-file "tst.rkt") 'val)))
+    (should (eq 'foobar (racket-emacs/unwrap-symbol imported)))))
 
 (ert-deftest basic-test-raw-car ()
-  (should (eq (call-racket-func-raw racket-car racket-tst-list) 'firstval)))
+  (should (eq (racket-emacs/runtime/call-raw racket-emacs/raw/car racket-tst-list) 'firstval)))
+
+(ert-deftest basic-test-call-add ()
+  (let* ((+ (racket-emacs/runtime/call-raw racket-emacs/raw/dynamic-require
+                                           (racket-emacs/wrap-symbol 'racket/base)
+                                           (racket-emacs/wrap-symbol '+)))
+         (res (racket-emacs/runtime/call-raw +
+                                             (racket-emacs/wrap-integer 2)
+                                             (racket-emacs/wrap-integer 3)))
+         (res (racket-emacs/unwrap-integer res)))
+    (should (eql 5 res))))
 
 ;;; basic-test.el ends here
 

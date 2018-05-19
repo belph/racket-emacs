@@ -154,6 +154,23 @@ Scheme_Object *wrap_emacs_value(emacs_env *env, emacs_value value, int rethrow) 
   return (Scheme_Object*)self;
 }
 
+Scheme_Object *unwrap_emacs_value(emacs_env *env, emacs_value value, int rethrow) {
+  if (!emacs_is_user_ptr(env, value)) {
+    EMACS_EXN(env, "racket-emacs", "Not a user pointer!");
+    return NULL;
+  }
+  Scheme_Object *ret;
+  MZ_GC_DECL_REG(1);
+  MZ_GC_VAR_IN_REG(0, ret);
+  MZ_GC_REG();
+  ret = *((Scheme_Object**)env->get_user_ptr(env, value));
+  if (rethrow) {
+    RETHROW_EMACS_ERROR(env);
+  }
+  MZ_GC_UNREG();
+  return ret;
+}
+
 
 static void prepare_env(void *envptr) {
   emacs_mz_env_ctxt *ctxt = (emacs_mz_env_ctxt*)envptr;

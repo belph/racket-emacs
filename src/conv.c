@@ -56,6 +56,14 @@ Scheme_Object *conv_emacs_string_to_scheme_string(emacs_env *env, emacs_value va
   return ret;
 }
 
+Scheme_Object *conv_emacs_bool_to_scheme_bool(emacs_env *env, emacs_value value) {
+  if (env->eq(env, value, env->intern(env, "nil"))) {
+    return scheme_false;
+  } else {
+    return scheme_true;
+  }
+}
+
 // Racket -> Emacs
 
 emacs_value conv_scheme_integer_to_emacs_integer(emacs_env *env, Scheme_Object *value) {
@@ -79,4 +87,12 @@ emacs_value conv_scheme_string_to_emacs_string(emacs_env *env, Scheme_Object *va
   char *buf = SCHEME_BYTE_STR_VAL(value);
   ptrdiff_t bytelen = SCHEME_BYTE_STRLEN_VAL(value);
   return env->make_string(env, buf, bytelen);
+}
+
+emacs_value conv_scheme_bool_to_emacs_bool(emacs_env *env, Scheme_Object *value) {
+  if (scheme_equal(scheme_false, value)) {
+    return env->intern(env, "nil");
+  } else {
+    return env->intern(env, "t");
+  }
 }

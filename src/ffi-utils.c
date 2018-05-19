@@ -66,13 +66,8 @@ emacs_value Fcall_racket_func_raw(emacs_env *env, ptrdiff_t argc, emacs_value ar
 
 // min arity: 1, max arity: 1
 emacs_value Fscheme_car(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
-  // Scheme object is from Emacs-land, so it's not GC-able
   if (argc != 1) {
-    emacs_value Qthrow_tag = env->intern(env, "racket-emacs");
-    emacs_value Qthrow_value = EMACS_STRING(env, "Invalid number of arguments for scheme_car");
-    if (env->non_local_exit_check(env) == emacs_funcall_exit_return) {
-      env->non_local_exit_throw(env, Qthrow_tag, Qthrow_value);
-    }
+    EMACS_EXN(env, "racket-emacs", "Invalid number of arguments for scheme_car");
     return NULL;
   }
   Scheme_Object *func = NULL;
@@ -146,7 +141,7 @@ emacs_value Fscheme_car(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void
   return wrap_racket_value(env, value);
 }
 
-emacs_value Fscheme_symbol(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
+emacs_value Fracket_emacs_wrap_symbol(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
   Scheme_Object *obj;
   emacs_value ret;
   MZ_GC_DECL_REG(1);
@@ -160,6 +155,56 @@ emacs_value Fscheme_symbol(emacs_env *env, ptrdiff_t argc, emacs_value argv[], v
   return ret;
 }
 
+static emacs_value conversion_wrapper_helper(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
+  Scheme_Object *(*conv)(emacs_env *, emacs_value) = data;
+  Scheme_Object *obj = NULL;
+  emacs_value ret;
+  MZ_GC_DECL_REG(1);
+  MZ_GC_VAR_IN_REG(0, obj);
+  MZ_GC_REG();
+  obj = conv(env, argv[0]);
+  EMACS_CHECK_EXIT_UNREG(env, NULL);
+  ret = wrap_racket_value(env, obj);
+  MZ_GC_UNREG();
+  return ret;
+}
+
+static emacs_value conversion_unwrapper_helper(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
+  emacs_value (*conv)(emacs_env *, Scheme_Object *) = data;
+  Scheme_Object *unwrapped = NULL;
+  emacs_value ret;
+  MZ_GC_DECL_REG(1);
+  MZ_GC_VAR_IN_REG(0, unwrapped);
+  MZ_GC_REG();
+  unwrapped = wrap_emacs_value(env, argv[0], false);
+  EMACS_CHECK_EXIT_UNREG(env, NULL);
+  ret = conv(env, unwrapped);
+  MZ_GC_UNREG();
+  return ret;
+}
+
+static emacs_value wrapped_racket_build_list(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
+  Scheme_Object *args[argc];
+  Scheme_Object *res = NULL;
+  emacs_value ret;
+  int idx;
+  for (idx = 0; idx < argc; ++idx) {
+    args[idx] = NULL;
+  }
+  MZ_GC_DECL_REG(4);
+  MZ_GC_ARRAY_VAR_IN_REG(0, args, argc);
+  MZ_GC_VAR_IN_REG(3, res);
+  MZ_GC_REG();
+  for (idx = 0; idx < argc; ++idx) {
+    args[idx] = wrap_emacs_value(env, argv[idx], 0);
+    EMACS_CHECK_EXIT_UNREG(env, NULL);
+  }
+  res = scheme_build_list(argc, args);
+  ret = wrap_racket_value(env, res);
+  MZ_GC_UNREG();
+  return ret;
+}
+
 void register_ffi_utils_emacs_functions(emacs_env *env) {
   emacs_value fun, val;
   Scheme_Object *listelts[1];
@@ -169,13 +214,40 @@ void register_ffi_utils_emacs_functions(emacs_env *env) {
   MZ_GC_VAR_IN_REG(3, obj);
   MZ_GC_REG();
   fun = env->make_function(env, 1, -2, Fcall_racket_func_raw, "Invoke the given Racket function", NULL);
-  bind_function(env, "call-racket-func-raw", fun);
+  bind_function(env, "racket-emacs/runtime/call-raw", fun);
   
-  fun = env->make_function(env, 1, 1, Fscheme_car, "Get the first element of the given pair", NULL);
-  bind_function(env, "racket-car", fun);
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket integer", conv_scheme_integer_to_emacs_integer);
+  bind_function(env, "racket-emacs/unwrap-integer", fun);
 
-  fun = env->make_function(env, 1, 1, Fscheme_symbol, "Convert the given symbol to a racket symbol", NULL);
-  bind_function(env, "racket-symbol", fun);
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket float", conv_scheme_float_to_emacs_float);
+  bind_function(env, "racket-emacs/unwrap-float", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket symbol", conv_scheme_symbol_to_emacs_symbol);
+  bind_function(env, "racket-emacs/unwrap-symbol", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket string", conv_scheme_string_to_emacs_string);
+  bind_function(env, "racket-emacs/unwrap-string", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket bool", conv_scheme_bool_to_emacs_bool);
+  bind_function(env, "racket-emacs/unwrap-bool", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs integer", conv_emacs_integer_to_scheme_integer);
+  bind_function(env, "racket-emacs/wrap-integer", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs float", conv_emacs_float_to_scheme_float);
+  bind_function(env, "racket-emacs/wrap-float", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs symbol", conv_emacs_symbol_to_scheme_symbol);
+  bind_function(env, "racket-emacs/wrap-symbol", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs string", conv_emacs_string_to_scheme_string);
+  bind_function(env, "racket-emacs/wrap-string", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs bool", conv_emacs_bool_to_scheme_bool);
+  bind_function(env, "racket-emacs/wrap-bool", fun);
+
+  fun = env->make_function(env, 1, -2, wrapped_racket_build_list, "Build a Racket list from the given arguments", NULL);
+  bind_function(env, "racket-emacs/build-list", fun);
 
   val = env->intern(env, "firstval");
   //fprintf(stderr, "firstval non-global: %p\n", val);
@@ -194,6 +266,10 @@ void register_ffi_utils_emacs_functions(emacs_env *env) {
   //fprintf(stderr, "car non-global: %p\n", val);
   //val = env->make_global_ref(env, val);
   //fprintf(stderr, "car global: %p\n", val);
-  bind_value(env, "racket-car", val);
+  bind_value(env, "racket-emacs/raw/car", val);
+
+  obj = scheme_builtin_value("dynamic-require");
+  val = wrap_racket_value(env, obj);
+  bind_value(env, "racket-emacs/raw/dynamic-require", val);
   MZ_GC_UNREG();
 }

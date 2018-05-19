@@ -39,6 +39,7 @@ Scheme_Object *conv_emacs_integer_to_scheme_integer(emacs_env *env, emacs_value 
 Scheme_Object *conv_emacs_float_to_scheme_float(emacs_env *env, emacs_value value);
 Scheme_Object *conv_emacs_symbol_to_scheme_symbol(emacs_env *env, emacs_value value);
 Scheme_Object *conv_emacs_string_to_scheme_string(emacs_env *env, emacs_value value);
+Scheme_Object *conv_emacs_bool_to_scheme_bool(emacs_env *env, emacs_value value);
 
 
 // Racket values -> Emacs values
@@ -47,5 +48,6 @@ emacs_value conv_scheme_integer_to_emacs_integer(emacs_env *env, Scheme_Object *
 emacs_value conv_scheme_float_to_emacs_float(emacs_env *env, Scheme_Object *value);
 emacs_value conv_scheme_symbol_to_emacs_symbol(emacs_env *env, Scheme_Object *value);
 emacs_value conv_scheme_string_to_emacs_string(emacs_env *env, Scheme_Object *value);
+emacs_value conv_scheme_bool_to_emacs_bool(emacs_env *env, Scheme_Object *value);
 
 #endif // RKT_EMACS_CONV_H

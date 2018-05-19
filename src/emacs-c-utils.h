@@ -33,16 +33,16 @@
 
 #define EMACS_CHECK_EXIT(env, retval)                                   \
   do {                                                                  \
-    emacs_env *___eenv = env;                                           \
-    if (___eenv->non_local_exit_check(___eenv) != emacs_funcall_exit_return) { \
+    emacs_env *___eenv_exit = env;                                           \
+    if (___eenv_exit->non_local_exit_check(___eenv_exit) != emacs_funcall_exit_return) { \
       return retval;                                                    \
     }                                                                   \
   } while (0)
 
 #define EMACS_CHECK_EXIT_UNREG(env, retval)                             \
   do {                                                                  \
-    emacs_env *___eenv = env;                                           \
-    if (___eenv->non_local_exit_check(___eenv) != emacs_funcall_exit_return) { \
+    emacs_env *___eenv_exit = env;                                           \
+    if (___eenv_exit->non_local_exit_check(___eenv_exit) != emacs_funcall_exit_return) { \
       MZ_GC_UNREG();                                                    \
       return retval;                                                    \
     }                                                                   \
@@ -50,12 +50,22 @@
 
 // Creates an emacs_value string from the given constant
 #define EMACS_STRING(env, s) \
-  ({                                                     \
-    emacs_env *___eenv = env;                            \
-    char __s[] = "" s; /* force to be string literal */  \
-    ptrdiff_t __len = STRLEN(__s);                       \
-    ___eenv->make_string(___eenv, __s, __len);           \
+  ({                                                         \
+    emacs_env *___eenv_str = env;                            \
+    char __s[] = "" s; /* force to be string literal */      \
+    ptrdiff_t __len = STRLEN(__s);                               \
+    ___eenv_str->make_string(___eenv_str, __s, __len);           \
   })
+
+#define EMACS_EXN(env, tag, value) \
+  do {                             \
+    emacs_env *___eenv_exn = env;                                   \
+    emacs_value Qthrow_tag = ___eenv_exn->intern(___eenv_exn, tag);     \
+    emacs_value Qthrow_value = EMACS_STRING(___eenv_exn, value);        \
+    if (___eenv_exn->non_local_exit_check(___eenv_exn) == emacs_funcall_exit_return) { \
+      ___eenv_exn->non_local_exit_throw(___eenv_exn, Qthrow_tag, Qthrow_value); \
+    }                                                                   \
+  } while (0)
 
 /**
  * @brief Convert an Emacs string to a C string and save its size
