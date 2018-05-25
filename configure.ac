@@ -82,6 +82,10 @@ AC_SEARCH_LIBS([ffi_raw_call], [ffi], [], [
   AC_MSG_ERROR([unable to locate libffi. Please ensure that it is installed.])
 ])
 
+AC_SEARCH_LIBS([hattrie_get], [hat-trie], [], [
+  AC_MSG_ERROR([unable to locate libhat-trie. Please ensure that it is installed.])
+])
+
 AC_SEARCH_LIBS([scheme_main_setup], [racket3m], [], [
   AC_MSG_ERROR([unable to locate libracket3m.])
 ])
@@ -97,6 +101,10 @@ AC_CHECK_HEADERS([emacs-module.h], [
   EMACS_HEADER_SOURCE=AC_PACKAGE_NAME
 ])
 AM_CONDITIONAL([NEEDS_EMACS_HEADER], [test "x$NEEDS_EMACS_HEADER_TMP" = "xyes"])
+
+AC_CHECK_HEADERS([hat-trie/hat-trie.h], [], [
+  AC_MSG_ERROR([unable to locate libhat-trie headers])
+])
 
 RACKET_DEF([RACKET_DEFAULT_GC], ['(displayln (system-type (quote gc)))'])
 AM_CONDITIONAL([RACKET_GC_IS3M_TST], [test "x$RACKET_DEFAULT_GC" = "x3m"])

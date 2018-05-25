@@ -75,6 +75,47 @@ emacs_value emacs_symbol_name(emacs_env *env, emacs_value Qsym) {
   return env->funcall(env, Qsymbol_name, 1, args);
 }
 
+emacs_value emacs_symbol_value(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qsymbol_value = env->intern(env, "symbol-value");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  return env->funcall(env, Qsymbol_value, 1, args);
+}
+
+emacs_value emacs_symbol_function(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qsymbol_function = env->intern(env, "symbol-function");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  return env->funcall(env, Qsymbol_function, 1, args);
+}
+
+emacs_value emacs_format(emacs_env *env, const char *format_str, ptrdiff_t argc, emacs_value rest_args[]) {
+  emacs_value Qsymbol_format = env->intern(env, "format");
+  emacs_value args[argc + 1];
+  int idx;
+  EMACS_CHECK_EXIT(env, NULL);
+  args[0] = env->make_string(env, format_str, strlen(format_str));
+  EMACS_CHECK_EXIT(env, NULL);
+  for (idx = 0; idx < argc; ++idx) {
+    args[idx + 1] = rest_args[idx];
+  }
+  return env->funcall(env, Qsymbol_format, argc + 1, args);
+}
+
+emacs_value emacs_message(emacs_env *env, const char *format_str, ptrdiff_t argc, emacs_value rest_args[]) {
+  emacs_value Qsymbol_message = env->intern(env, "message");
+  emacs_value args[argc + 1];
+  int idx;
+  EMACS_CHECK_EXIT(env, NULL);
+  args[0] = env->make_string(env, format_str, strlen(format_str));
+  EMACS_CHECK_EXIT(env, NULL);
+  for (idx = 0; idx < argc; ++idx) {
+    args[idx + 1] = rest_args[idx];
+  }
+  //fprintf(stderr, "Calling message with format: '%s'; argc: '%s'; ")
+  return env->funcall(env, Qsymbol_message, argc + 1, args);
+}
+
 // Source: http://phst.github.io/emacs-modules.html#interning
 bool emacs_safe_intern(emacs_env *env, const char *name, size_t size, emacs_value *result) {
   bool simple = true;

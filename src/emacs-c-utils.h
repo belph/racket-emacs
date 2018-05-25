@@ -30,6 +30,8 @@
 #include <emacs-module.h>
 
 #define STRLEN(x) ((sizeof(x) / sizeof(char)) - 1)
+// https://stackoverflow.com/a/2124433
+#define NUMEMACS_ARGS(...)  (sizeof((emacs_value[]){NULL, ##__VA_ARGS__})/sizeof(emacs_value) - 1)
 
 #define EMACS_CHECK_EXIT(env, retval)                                   \
   do {                                                                  \
@@ -67,6 +69,12 @@
     }                                                                   \
   } while (0)
 
+#define EMACS_MESSAGE(env, format, ...)                   \
+  do {                                                    \
+    emacs_value __msg_args[] = {__VA_ARGS__};             \
+    emacs_message(env, format, NUMEMACS_ARGS(__VA_ARGS__), __msg_args); \
+  } while (0)
+
 /**
  * @brief Convert an Emacs string to a C string and save its size
  *
@@ -98,6 +106,30 @@ char *emacs_string_to_c_string(emacs_env *env, emacs_value value);
  * @return The Emacs string containing the given symbol's name
  */
 emacs_value emacs_symbol_name(emacs_env *env, emacs_value sym);
+
+/**
+ * @brief Wrapper for @verbatim symbol-value@endverbatim
+ * @return The Emacs value bound to the symbol's value slot
+ */
+emacs_value emacs_symbol_value(emacs_env *env, emacs_value sym);
+
+/**
+ * @brief Wrapper for @verbatim symbol-function@endverbatim
+ * @return The Emacs value bound to the symbol's function slot
+ */
+emacs_value emacs_symbol_function(emacs_env *env, emacs_value sym);
+
+/**
+ * @brief Wrapper for @verbatim format@endverbatim
+ * @return The formatted Emacs string
+ */
+emacs_value emacs_format(emacs_env *env, const char *format, ptrdiff_t argc, emacs_value args[]);
+
+/**
+ * @brief Wrapper for @verbatim message@endverbatim
+ * @return The message
+ */
+emacs_value emacs_message(emacs_env *env, const char *format, ptrdiff_t argc, emacs_value args[]);
 
 /**
  * @brief UTF-aware wrapper for Emacs interning

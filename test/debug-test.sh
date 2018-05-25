@@ -3,7 +3,7 @@
 SCRIPT_DIR=$(realpath "$(dirname $0)")
 ROOT_DIR=$(realpath "${SCRIPT_DIR}/..")
 
-exec gdb -q -ex 'handle SIGSEGV nostop noprint' -ex 'b racket-rtutils.c:91' -ex 'r' --args \
+exec gdb -q -ex 'handle SIGSEGV nostop noprint' -ex 'r' --args \
      emacs -Q -batch \
      -L ":${SCRIPT_DIR}" \
      -L ":${SCRIPT_DIR}/src" \

@@ -10,43 +10,6 @@
 #include "emacs-c-utils.h"
 
 #define STRLEN(x) ((sizeof(x) / sizeof(char)) - 1)
-#define SCHEME_PRINT_STR_PORT(s, port) \
-  do {                                                \
-    char __s[] = s;                                   \
-    Scheme_Object *__p = port;                        \
-    scheme_write_byte_string(__s, STRLEN(__s), __p);  \
-    scheme_flush_output(__p);                         \
-  } while (0)
-
-#define SCHEME_PRINT_STR(s) \
-  do {                                                \
-    char __s[] = s;                                   \
-    Scheme_Config *__c = NULL;                        \
-    Scheme_Object *__p = NULL;                        \
-    MZ_GC_DECL_REG(2);                                \
-    MZ_GC_VAR_IN_REG(0, __c);                         \
-    MZ_GC_VAR_IN_REG(1, __p);                         \
-    MZ_GC_REG();                                      \
-    __c = scheme_current_config();                        \
-    __p = scheme_get_param(__c, MZCONFIG_OUTPUT_PORT);    \
-    scheme_write_byte_string(__s, STRLEN(__s), __p);  \
-    scheme_flush_output(__p);                         \
-  } while (0)
-
-#define SCHEME_DISPLAY(o) \
-  do {                                                \
-    Scheme_Config *__c = NULL;                        \
-    Scheme_Object *__p = NULL;                        \
-    MZ_GC_DECL_REG(2);                                \
-    MZ_GC_VAR_IN_REG(0, __c);                         \
-    MZ_GC_VAR_IN_REG(1, __p);                         \
-    MZ_GC_REG();                                      \
-    __c = scheme_current_config();                        \
-    __p = scheme_get_param(__c, MZCONFIG_OUTPUT_PORT);    \
-    scheme_display(o, __p);                               \
-    scheme_flush_output(__p);                         \
-  } while (0)
-
 
 typedef struct {
   Scheme_Config *old_config;

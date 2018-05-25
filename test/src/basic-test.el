@@ -49,6 +49,13 @@
          (res (racket-emacs/unwrap-integer res)))
     (should (eql 5 res))))
 
+(ert-deftest basic-test-pprint ()
+  (racket-emacs/pretty-print (racket-emacs/wrap-integer 2)))
+
+(ert-deftest basic-test-defracket ()
+  (defracket racket/base (racket+ . +))
+  (should (eql 5 (racket+ 2 3))))
+
 ;;; basic-test.el ends here
 
 

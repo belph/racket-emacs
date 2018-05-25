@@ -8,12 +8,14 @@
 #include "ffi-utils.h"
 
 emacs_value Fcall_racket_func_raw(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
+  fprintf(stderr, "starting Fcall_racket_func_raw\n");
   Scheme_Object *sch_obj = NULL;
   Scheme_Object *args[argc - 1];
   Scheme_Object *value = NULL;
   Scheme_Object *exn = NULL;
   Scheme_Config *oldconfig = NULL;
   Scheme_Config *config = NULL;
+  Scheme_Object *curout = NULL;
   int idx;
   for (idx = 0; idx < argc - 1; ++idx) {
     args[idx] = NULL;
@@ -25,20 +27,36 @@ emacs_value Fcall_racket_func_raw(emacs_env *env, ptrdiff_t argc, emacs_value ar
   MZ_GC_VAR_IN_REG(5, oldconfig);
   MZ_GC_VAR_IN_REG(6, config);
   MZ_GC_VAR_IN_REG(7, sch_obj);
+  MZ_GC_VAR_IN_REG(8, curout);
   MZ_GC_REG();
-  sch_obj = *((Scheme_Object**)env->get_user_ptr(env, argv[0]));
+  fprintf(stderr, "pre-get_user_ptr (argv[0]: %p)\n", argv[0]);
+  EMACS_MESSAGE(env, "Fcall_racket_func_raw function: %S", argv[0]);
+  EMACS_CHECK_EXIT_UNREG(env, NULL);
+  Scheme_Object **obj_ref = (Scheme_Object**)env->get_user_ptr(env, argv[0]);
+  fprintf(stderr, "pre-deref (obj_ref: %p)\n", obj_ref);
+  //sch_obj = *((Scheme_Object**)env->get_user_ptr(env, argv[0]));
+  sch_obj = *obj_ref;
+  fprintf(stderr, "pre-wrap\n");
   for (idx = 0; idx < argc - 1; ++idx) {
     emacs_value arg = argv[idx + 1];
     //fprintf(stderr, "emacs_value arg: %p\n", arg);
     args[idx] = wrap_emacs_value(env, arg, false);
     EMACS_CHECK_EXIT_UNREG(env, NULL);
   }
+  fprintf(stderr, "finished wrap\n");
   MZ_GC_CHECK();
   oldconfig = scheme_current_config();
   config = config_with_env(oldconfig, env);
   scheme_install_config(config);
+  fprintf(stderr, "calling: ");
+  SCHEME_DISPLAY(sch_obj);
+  SCHEME_PRINT_STR("\n");
   value = _apply_func_catch_exceptions(sch_obj, argc - 1, args, &exn);
   scheme_install_config(oldconfig);
+  fprintf(stderr, "finished calling\n");
+  SCHEME_PRINT_STR("Racket value:");
+  SCHEME_DISPLAY(value);
+  SCHEME_PRINT_STR("\n");
   // Null out so non-escaping wrapped values are GC'd
   for (idx = 0; idx < argc - 1; ++idx) {
     args[idx] = NULL;
@@ -230,6 +248,9 @@ void register_ffi_utils_emacs_functions(emacs_env *env) {
 
   fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket bool", conv_scheme_bool_to_emacs_bool);
   bind_function(env, "racket-emacs/unwrap-bool", fun);
+
+  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Wrap the given Emacs primitive value, as possible", conv_scheme_primitive_to_emacs_primitive);
+  bind_function(env, "racket-emacs--unwrap-primitive", fun);
 
   fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs integer", conv_emacs_integer_to_scheme_integer);
   bind_function(env, "racket-emacs/wrap-integer", fun);

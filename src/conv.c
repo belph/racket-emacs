@@ -25,6 +25,7 @@
 #include <emacs-module.h>
 
 #include "emacs-c-utils.h"
+#include "racket-rtutils.h"
 #include "conv.h"
 
 // Emacs -> Racket
@@ -90,9 +91,25 @@ emacs_value conv_scheme_string_to_emacs_string(emacs_env *env, Scheme_Object *va
 }
 
 emacs_value conv_scheme_bool_to_emacs_bool(emacs_env *env, Scheme_Object *value) {
-  if (scheme_equal(scheme_false, value)) {
+  if (SCHEME_FALSEP(value)) {
     return env->intern(env, "nil");
   } else {
     return env->intern(env, "t");
   }
+}
+
+// "Smarter" conversion function
+emacs_value conv_scheme_primitive_to_emacs_primitive(emacs_env *env, Scheme_Object *value) {
+  if (SCHEME_SYMBOLP(value)) {
+    return conv_scheme_symbol_to_emacs_symbol(env, value);
+  } else if (SCHEME_INTP(value)) {
+    return conv_scheme_integer_to_emacs_integer(env, value);
+  } else if (SCHEME_REALP(value)) {
+    return conv_scheme_float_to_emacs_float(env, value);
+  } else if (SCHEME_CHAR_STRINGP(value) || SCHEME_BYTE_STRINGP(value)) {
+    return conv_scheme_string_to_emacs_string(env, value);
+  } else if (SCHEME_BOOLP(value)) {
+    return conv_scheme_bool_to_emacs_bool(env, value);
+  }
+  return wrap_racket_value(env, value);
 }
