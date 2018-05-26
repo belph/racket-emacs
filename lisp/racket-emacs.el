@@ -36,6 +36,7 @@
 (require 'cl-lib)
 
 (defconst racket-emacs--directory (file-name-directory load-file-name))
+(defconst racket-emacs--collects-dir (file-truename (concat racket-emacs--directory "/collects")))
 
 (unless (require 'libracketemacs nil :noerror)
   (add-to-list 'load-path racket-emacs--directory)
@@ -45,20 +46,24 @@
   "Convert X to its wrapped Racket primitive representation, as possible.
 NIL values will be converted to booleans."
   (cond
-   ((or (eq x t) (eq x nil)) (racket-emacs/wrap-bool x))
+   ((eq x nil) racket-emacs/null)
    ((integerp x) (racket-emacs/wrap-integer x))
    ((floatp x) (racket-emacs/wrap-float x))
    ((symbolp x) (racket-emacs/wrap-symbol x))
    ((stringp x) (racket-emacs/wrap-string x))
+   ((consp x) (racket-emacs/wrap-cons (cons (racket-emacs--wrap-primitive (car x))
+                                            (racket-emacs--wrap-primitive (cdr x)))))
    (t x)))
 
 (defun racket-emacs--wrapped-apply (func args)
   "Apply FUNC with ARGS, wrapping primitive values as possible."
+  (message "applying %S with args %S" func args)
   (racket-emacs--unwrap-primitive
    (apply 'racket-emacs/runtime/call-raw (cons func (mapcar 'racket-emacs--wrap-primitive args)))))
 
 (defun racket-emacs--wrapped-func (func)
   "Create a lambda-wrapped version of FUNC."
+  (message "wrapping %S" func)
   (lambda (&rest args) (message "Applying %S with args: %S" func args) (racket-emacs--wrapped-apply func args)))
 
 ;; draft version:
@@ -126,21 +131,43 @@ NIL values will be converted to booleans."
   (princ (with-temp-buffer
            (re-cl-prettyprint form)
            (buffer-string))
-         output-stream))
+         output-stream)
+  (princ "\n" output-stream))
+
+(defun pprint-macroexpand (form &optional output-stream)
+  (pprint (macroexpand form) output-stream))
 
 (defun racket-emacs/pretty-print (value)
   "Pretty-print VALUE to STDOUT."
   (let ((bind (racket-emacs/dynamic-require 'racket/pretty 'pretty-print)))
     (racket-emacs--wrapped-apply (cdar bind) (list value))))
 
-(defmacro defracket (mod &rest identifiers)
-  "Defines IDENTIFIERS by wrapping the expored Racket values from MOD."
-  (let* ((mapped (mapcar (lambda (id) `',id) identifiers)))
-    `(dolist (bind (racket-emacs/dynamic-require ',mod . ,mapped))
-       (let ((out-id (car bind))
-             (val (cdr bind)))
-         (set out-id val)
-         (fset out-id (racket-emacs--wrapped-func val))))))
+(defun racket-emacs/runtime/expand-requires (spec)
+  (racket-emacs--unwrap-primitive
+   (racket-emacs/runtime/raw/expand-requires
+    (racket-emacs--wrap-primitive spec))))
+
+;;(defmacro defracket (mod &rest identifiers)
+;;  "Defines IDENTIFIERS by wrapping the expored Racket values from MOD."
+;;  (let* ((mapped (mapcar (lambda (id) `',id) identifiers)))
+;;    `(dolist (bind (racket-emacs/dynamic-require ',mod . ,mapped))
+;;       (let ((out-id (car bind))
+;;             (val (cdr bind)))
+;;         (set out-id val)
+;;         (fset out-id (racket-emacs--wrapped-func val))))))
+
+(defmacro defracket (spec)
+  "Import the values listed in the Racket require specification SPEC."
+  `(dolist (bind (racket-emacs/runtime/expand-requires ',spec))
+     (let ((name (car bind))
+           (import-type (cadr bind))
+           (value (cddr bind)))
+       (cond ((eq import-type 'value)
+              (set name value)
+              (fset name (racket-emacs--wrapped-func value)))
+             ((eq import-type 'macro)
+              (error "Macro imports are unsupported"))
+             (t (error "Unknown import type: %S" (cadr bind)))))))
 
 (defmacro let-racket (binds &rest body)
   "Create local bindings of the Racket values specified in BINDS in the scope of BODY."

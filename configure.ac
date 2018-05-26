@@ -12,7 +12,10 @@ CHECK_EMACS()
 
 CHECK_EMACS_MODULE_SUPPORT()
 
-AC_ARG_ENABLE([debug], [Turn on debug builds], [CFLAGS="$CFLAGS -g"])
+AC_ARG_ENABLE([debug], [Turn on debug builds], [
+  CFLAGS="$CFLAGS -g"
+  AC_DEFINE(RE_DEBUG_BUILD, [1], [Whether this is a debug build.])
+])
 dnl From Emacs configure.ac:
 AC_CACHE_CHECK([for 'find' args to delete a file],
   [emacs_cv_find_delete],

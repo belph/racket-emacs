@@ -89,6 +89,45 @@ emacs_value emacs_symbol_function(emacs_env *env, emacs_value Qsym) {
   return env->funcall(env, Qsymbol_function, 1, args);
 }
 
+emacs_value emacs_car(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qcar = env->intern(env, "car");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  return env->funcall(env, Qcar, 1, args);
+}
+
+emacs_value emacs_cdr(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qcdr = env->intern(env, "cdr");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  return env->funcall(env, Qcdr, 1, args);
+}
+
+emacs_value emacs_cons(emacs_env *env, emacs_value Qcar, emacs_value Qcdr) {
+  emacs_value Qcons = env->intern(env, "cons");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qcar, Qcdr };
+  return env->funcall(env, Qcons, 2, args);
+}
+
+bool emacs_boundp(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qsymbol_boundp = env->intern(env, "boundp");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  emacs_value ret = env->funcall(env, Qsymbol_boundp, 1, args);
+  EMACS_CHECK_EXIT(env, NULL);
+  return env->is_not_nil(env, ret);
+}
+
+bool emacs_fboundp(emacs_env *env, emacs_value Qsym) {
+  emacs_value Qsymbol_fboundp = env->intern(env, "fboundp");
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value args[] = { Qsym };
+  emacs_value ret = env->funcall(env, Qsymbol_fboundp, 1, args);
+  EMACS_CHECK_EXIT(env, NULL);
+  return env->is_not_nil(env, ret);
+}
+
 emacs_value emacs_format(emacs_env *env, const char *format_str, ptrdiff_t argc, emacs_value rest_args[]) {
   emacs_value Qsymbol_format = env->intern(env, "format");
   emacs_value args[argc + 1];
@@ -114,6 +153,21 @@ emacs_value emacs_message(emacs_env *env, const char *format_str, ptrdiff_t argc
   }
   //fprintf(stderr, "Calling message with format: '%s'; argc: '%s'; ")
   return env->funcall(env, Qsymbol_message, argc + 1, args);
+}
+
+emacs_value emacs_load_file_directory(emacs_env *env) {
+  emacs_value Qsymbol_load_file_name = env->intern(env, "load-file-name");
+  emacs_value Qfile_name_directory = env->intern(env, "file-name-directory");
+  emacs_value Qfile_truename = env->intern(env, "file-truename");
+  EMACS_CHECK_EXIT(env, NULL);
+  if (!emacs_boundp(env, Qsymbol_load_file_name)) {
+    return env->intern(env, "nil");
+  }
+  emacs_value Qload_file_name = emacs_symbol_value(env, Qsymbol_load_file_name);
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value Qload_file_directory = env->funcall(env, Qfile_name_directory, 1, &Qload_file_name);
+  EMACS_CHECK_EXIT(env, NULL);
+  return env->funcall(env, Qfile_truename, 1, &Qload_file_directory);
 }
 
 // Source: http://phst.github.io/emacs-modules.html#interning

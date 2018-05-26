@@ -2,11 +2,21 @@
 #define RE_RACKET_RTUTILS_H
 
 #include <re-config.h>
+#include <re-macros.h>
 #include <scheme.h>
 #include <emacs-module.h>
 
 #include "racket-rt.h"
 #include "conv.h"
+
+typedef struct {
+  Scheme_Primitive_Closure_Proc *proc;
+  const char *proc_name;
+  size_t primc;
+  Scheme_Object **primv;
+  emacs_env *env;
+} emacs_mz_prim_runinfo;
+
 
 emacs_value wrap_racket_value(emacs_env *env, Scheme_Object *value);
 Scheme_Object *wrap_emacs_env(emacs_env *env);
@@ -22,14 +32,18 @@ Scheme_Config *config_with_env(Scheme_Config *config, emacs_env *env);
 Scheme_Config *current_config_with_env(emacs_env *env);
 
 Scheme_Object *with_env(emacs_env *env, Scheme_Object* (*worker_fun)(void*), Scheme_Object* (*jump_handler)(void*), void *data);
+Scheme_Object *racket_safe_run_prim(emacs_mz_prim_runinfo *runinfo);
 
 void raise_emacs_exn(const char *msg);
 
 Scheme_Object *_apply_thunk_catch_exceptions(Scheme_Object *f, Scheme_Object **exn);
 Scheme_Object *_apply_func_catch_exceptions(Scheme_Object *f, int argc, Scheme_Object *argv[], Scheme_Object **exn);
 Scheme_Object *extract_exn_message(Scheme_Object *v);
+Scheme_Object *expand_requires(emacs_env *env, Scheme_Object *v);
+// val == NULL is the same as #f
+Scheme_Object *racket_safe_dynamic_require(emacs_env *env, Scheme_Object *mod, Scheme_Object *val);
 
-void init_racket_rtutils();
+void init_racket_rtutils(emacs_env *eenv);
 
 #define RETHROW_EMACS_ERROR(env)                \
   do {                                            \
@@ -42,6 +56,8 @@ void init_racket_rtutils();
                           conv_emacs_string_to_scheme_string(___eenv, _Qdata)); \
     }                                                                   \
   } while (0)
+
+#ifdef RE_DEBUG_BUILD
 
 #define SCHEME_PRINT_STR_PORT(s, port) \
   do {                                                \
@@ -79,5 +95,15 @@ void init_racket_rtutils();
     scheme_display(o, __p);                               \
     scheme_flush_output(__p);                         \
   } while (0)
+
+#else // RE_DEBUG_BUILD
+
+#define SCHEME_PRINT_STR_PORT(s, port) do {} while (0)
+#define SCHEME_PRINT_STR(s) do {} while (0)
+#define SCHEME_DISPLAY(o) do {} while (0)
+
+#endif // RE_DEBUG_BUILD
+
+#define SCHEME_DISPLAYLN(o) SCHEME_DISPLAY(o); SCHEME_PRINT_STR("\n")
 
 #endif // RE_RACKET_RTUTILS_H

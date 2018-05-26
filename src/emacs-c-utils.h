@@ -120,6 +120,36 @@ emacs_value emacs_symbol_value(emacs_env *env, emacs_value sym);
 emacs_value emacs_symbol_function(emacs_env *env, emacs_value sym);
 
 /**
+ * @brief Wrapper for @verbatim car@endverbatim
+ * @return The Emacs value in the car position
+ */
+emacs_value emacs_car(emacs_env *env, emacs_value value);
+
+/**
+ * @brief Wrapper for @verbatim cdr@endverbatim
+ * @return The Emacs value in the cdr position
+ */
+emacs_value emacs_cdr(emacs_env *env, emacs_value value);
+
+/**
+ * @brief Wrapper for @verbatim cons@endverbatim
+ * @return The Emacs pair
+ */
+emacs_value emacs_cons(emacs_env *env, emacs_value Qcar, emacs_value Qcdr);
+
+/**
+ * @brief Wrapper for @verbatim boundp@endverbatim
+ * @return Whether the symbol is bound
+ */
+bool emacs_boundp(emacs_env *env, emacs_value Qsym);
+
+/**
+ * @brief Wrapper for @verbatim fboundp@endverbatim
+ * @return Whether the symbol is bound
+ */
+bool emacs_fboundp(emacs_env *env, emacs_value Qsym);
+
+/**
  * @brief Wrapper for @verbatim format@endverbatim
  * @return The formatted Emacs string
  */
@@ -130,6 +160,11 @@ emacs_value emacs_format(emacs_env *env, const char *format, ptrdiff_t argc, ema
  * @return The message
  */
 emacs_value emacs_message(emacs_env *env, const char *format, ptrdiff_t argc, emacs_value args[]);
+
+/**
+ * @brief Fetch the directory of the current file
+ */
+emacs_value emacs_load_file_directory(emacs_env *env);
 
 /**
  * @brief UTF-aware wrapper for Emacs interning

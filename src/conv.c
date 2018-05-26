@@ -52,7 +52,7 @@ Scheme_Object *conv_emacs_string_to_scheme_string(emacs_env *env, emacs_value va
   ptrdiff_t bufsize;
   char *buf = emacs_string_to_c_string_with_size(env, value, &bufsize);
   EMACS_CHECK_EXIT(env, NULL);
-  Scheme_Object *ret = scheme_make_sized_utf8_string(buf, bufsize);
+  Scheme_Object *ret = scheme_make_sized_utf8_string(buf, bufsize - 1); // skip null
   free(buf);
   return ret;
 }
@@ -63,6 +63,24 @@ Scheme_Object *conv_emacs_bool_to_scheme_bool(emacs_env *env, emacs_value value)
   } else {
     return scheme_true;
   }
+}
+
+Scheme_Object *conv_emacs_pair_to_scheme_pair(emacs_env *env, emacs_value value) {
+  Scheme_Object *car = NULL;
+  Scheme_Object *cdr = NULL;
+  Scheme_Object *ret = NULL;
+  MZ_GC_DECL_REG(3);
+  MZ_GC_VAR_IN_REG(0, car);
+  MZ_GC_VAR_IN_REG(1, cdr);
+  MZ_GC_VAR_IN_REG(2, ret);
+  MZ_GC_REG();
+  car = wrap_emacs_value(env, emacs_car(env, value), false);
+  EMACS_CHECK_EXIT_UNREG(env, NULL);
+  cdr = wrap_emacs_value(env, emacs_cdr(env, value), false);
+  EMACS_CHECK_EXIT_UNREG(env, NULL);
+  ret = scheme_make_pair(car, cdr);
+  MZ_GC_UNREG();
+  return ret;
 }
 
 // Racket -> Emacs
@@ -98,6 +116,18 @@ emacs_value conv_scheme_bool_to_emacs_bool(emacs_env *env, Scheme_Object *value)
   }
 }
 
+emacs_value conv_scheme_pair_to_emacs_pair(emacs_env *env, Scheme_Object *value) {
+  emacs_value ret;
+  MZ_GC_DECL_REG(1);
+  MZ_GC_VAR_IN_REG(0, value);
+  MZ_GC_REG();
+  ret = emacs_cons(env,
+                   wrap_racket_value(env, SCHEME_CAR(value)),
+                   wrap_racket_value(env, SCHEME_CDR(value)));
+  MZ_GC_UNREG();
+  return ret;
+}
+
 // "Smarter" conversion function
 emacs_value conv_scheme_primitive_to_emacs_primitive(emacs_env *env, Scheme_Object *value) {
   if (SCHEME_SYMBOLP(value)) {
@@ -110,6 +140,27 @@ emacs_value conv_scheme_primitive_to_emacs_primitive(emacs_env *env, Scheme_Obje
     return conv_scheme_string_to_emacs_string(env, value);
   } else if (SCHEME_BOOLP(value)) {
     return conv_scheme_bool_to_emacs_bool(env, value);
+  } else if (SCHEME_PAIRP(value)) {
+    Scheme_Object *car = SCHEME_CAR(value);
+    Scheme_Object *cdr = SCHEME_CDR(value);
+    emacs_value ecar, ecdr, ret;
+    MZ_GC_DECL_REG(2);
+    MZ_GC_VAR_IN_REG(0, car);
+    MZ_GC_VAR_IN_REG(1, cdr);
+    MZ_GC_REG();
+    ecar = conv_scheme_primitive_to_emacs_primitive(env, car);
+    EMACS_CHECK_EXIT_UNREG(env, NULL);
+    ecdr = conv_scheme_primitive_to_emacs_primitive(env, cdr);
+    EMACS_CHECK_EXIT_UNREG(env, NULL);
+    ret = emacs_cons(env, ecar, ecdr);
+    MZ_GC_UNREG();
+    return ret;
+  } else if (SCHEME_NULLP(value)) {
+    return env->intern(env, "nil");
+  } else {
+    SCHEME_PRINT_STR("non-primitive: ");
+    SCHEME_DISPLAY(value);
+    SCHEME_PRINT_STR("\n");
   }
   return wrap_racket_value(env, value);
 }

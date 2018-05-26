@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #include <re-config.h>
+#include <re-macros.h>
 #include <scheme.h>
 #include <emacs-module.h>
 
@@ -274,46 +275,6 @@ static inline void racket_setup_sandbox() {
 #endif
 }
 
-static Scheme_Object *closed_dynamic_require(int argc, Scheme_Object **argv, Scheme_Object *prim) {
-  //fprintf(stderr, "Start closed_dynamic_require\n");
-  Scheme_Object *a[2] = {NULL, NULL};
-  Scheme_Object *ret = NULL;
-  Scheme_Object *curout = NULL;
-  Scheme_Config *config = NULL;
-  MZ_GC_DECL_REG(7);
-  MZ_GC_ARRAY_VAR_IN_REG(0, a, 2);
-  MZ_GC_VAR_IN_REG(3, ret);
-  MZ_GC_VAR_IN_REG(4, curout);
-  MZ_GC_VAR_IN_REG(5, config);
-  MZ_GC_VAR_IN_REG(6, prim);
-  MZ_GC_REG();
-  a[0] = SCHEME_PRIM_CLOSURE_ELS(prim)[0];
-  a[1] = SCHEME_PRIM_CLOSURE_ELS(prim)[1];
-  //fprintf(stderr, "a[0] addr: %p\n", a[0]);
-  //fprintf(stderr, "a[1] addr: %p\n", a[1]);
-
-  //config = scheme_current_config();
-  //curout = scheme_get_param(config, MZCONFIG_OUTPUT_PORT);
-  //fprintf(stderr, "Pre-print 0:\n");
-  //scheme_display(a[0], curout);
-  //scheme_flush_output(curout);
-  //fprintf(stderr, "\nPre-print 1:\n");
-  //scheme_display(a[1], curout);
-  //scheme_flush_output(curout);
-  MZ_GC_CHECK();
-
-  //fprintf(stderr, "\nPre-call\n");
-  //fprintf(stderr, "a[0] addr: %p\n", a[0]);
-  //fprintf(stderr, "a[1] addr: %p\n", a[1]);
-  //fprintf(stderr, "ret: %p\n", ret);
-  //fprintf(stderr, "curout: %p\n", curout);
-  //fprintf(stderr, "config: %p\n", config);
-  ret = scheme_dynamic_require(2, a);
-  //fprintf(stderr, "Post-call\n");
-  MZ_GC_UNREG();
-  //fprintf(stderr, "End closed_dynamic_require\n");
-  return ret;
-}
 
 static Scheme_Object *load_base_module(void *data) {
   scheme_namespace_require(scheme_intern_symbol((char *)data));
@@ -328,7 +289,7 @@ static Scheme_Object *load_base_module_on_error(void *data) {
 /* This function sets up the Racket runtime environment.
  * It is called once, before any user code is run.
  */
-static int racket_startup() {
+static int racket_startup(emacs_env *eenv) {
 #ifndef TRAMPOLINED_RACKET_STARTUP
   scheme_set_stack_base(stack_base, 1);
   /* in newer versions of precise GC the initial env has been created */
@@ -365,7 +326,34 @@ static int racket_startup() {
     }
   }
 
-  init_racket_rtutils();
+  emacs_value Qre_collects_dir = eenv->intern(eenv, "racket-emacs--collects-dir");
+  EMACS_CHECK_EXIT(eenv, 1);
+  bool has_dir = emacs_boundp(eenv, Qre_collects_dir);
+  EMACS_CHECK_EXIT(eenv, 1);
+  if (has_dir) {
+    Qre_collects_dir = emacs_symbol_value(eenv, Qre_collects_dir);
+    EMACS_CHECK_EXIT(eenv, 1);
+    Scheme_Object *path = NULL;
+    Scheme_Object *find_library_collection_paths = scheme_builtin_value("find-library-collection-paths");
+    Scheme_Object *path_list = NULL;
+    Scheme_Config *config = NULL;
+    MZ_GC_DECL_REG(4);
+    MZ_GC_VAR_IN_REG(0, path);
+    MZ_GC_VAR_IN_REG(1, find_library_collection_paths);
+    MZ_GC_VAR_IN_REG(2, path_list);
+    MZ_GC_VAR_IN_REG(3, config);
+    MZ_GC_REG();
+    config = scheme_current_config();
+    path = conv_emacs_string_to_scheme_string(eenv, Qre_collects_dir);
+    EMACS_CHECK_EXIT_UNREG(eenv, 1);
+    path_list = scheme_build_list(1, &path);
+    path_list = scheme_apply(find_library_collection_paths, 1, &path_list);
+    scheme_set_param(config, MZCONFIG_COLLECTION_PATHS, path_list);
+    scheme_install_config(config);
+    MZ_GC_UNREG();
+  }
+
+  init_racket_rtutils(eenv);
   /* redirect output */
   //scheme_console_output = do_output;
   //scheme_console_printf = do_printf;
@@ -388,19 +376,14 @@ static int racket_startup() {
 			 wrapped_emacs_env_fixup_proc,
 			 true, true);
 #endif
+  
   return 0;
 }
 
-int racket_init(emacs_env *emacs_env) {
+int racket_init(emacs_env *eenv) {
   if (!initialized) {
-    if (load_base_module_failed || racket_startup()) {
-      emacs_value Qthrow_tag = emacs_env->intern(emacs_env, "racket-emacs-init");
-      char msg[] = "Failed to initialize racket/base module.";
-      emacs_value Qthrow_value = emacs_env->make_string(emacs_env, msg, (sizeof(msg) / sizeof(char)) - 1);
-      if (emacs_env->non_local_exit_check(emacs_env) != emacs_funcall_exit_return) {
-	return -1;
-      }
-      emacs_env->non_local_exit_throw(emacs_env, Qthrow_tag, Qthrow_value);
+    if (load_base_module_failed || racket_startup(eenv)) {
+      EMACS_EXN(eenv, "racket-emacs-init", "Failed to initialize racket/base module.");
       return -1;
     }
     initialized = true;
@@ -426,82 +409,30 @@ int racket_init(emacs_env *emacs_env) {
   return 0;
 }
 
-static Scheme_Object *do_eval_racket_file(void *frinfo_ptr) {
-  filerun_info *frinfo = (filerun_info*)frinfo_ptr;
-  char *filename = frinfo->filename;
-  Scheme_Object   *value = NULL;
-  Scheme_Object   *exn = NULL;
-  Scheme_Object   *prim = NULL;
-  Scheme_Object *a[2] = {NULL, NULL};
-  MZ_GC_DECL_REG(6);
-  MZ_GC_VAR_IN_REG(0, value);
-  MZ_GC_VAR_IN_REG(1, exn);
-  MZ_GC_VAR_IN_REG(2, prim);
-  MZ_GC_ARRAY_VAR_IN_REG(3, a, 3);
-  MZ_GC_REG();
-
-  a[0] = scheme_make_pair(scheme_intern_symbol("file"),
-			  scheme_make_pair(scheme_make_utf8_string(filename),
-					   scheme_null));
-  a[1] = frinfo->sym;
-  
-  prim = scheme_make_prim_closure_w_arity(closed_dynamic_require, 2, a, "closed-dynamic-require", 0, 0);
-  MZ_GC_CHECK();
-  //fprintf(stderr, "Pre-apply thunk\n");
-  value = _apply_thunk_catch_exceptions(prim, &exn);
-  //fprintf(stderr, "Post-apply thunk\n");
-  MZ_GC_CHECK();
-
-  if (!value) {
-    *(frinfo->res) = scheme_make_false();
-    emacs_env *emacs_env = get_current_emacs_env();
-    value = extract_exn_message(exn);
-    emacs_value Qthrow_tag = emacs_env->intern(emacs_env, "racket-emacs");
-    emacs_value Qthrow_value;
-    if (value) {
-      Qthrow_value = conv_scheme_string_to_emacs_string(emacs_env, value);
-      MZ_GC_CHECK();
-    } else {
-      Qthrow_value = emacs_env->intern(emacs_env, "nil");
-    }
-    if (emacs_env->non_local_exit_check(emacs_env) == emacs_funcall_exit_return) {
-      emacs_env->non_local_exit_throw(emacs_env, Qthrow_tag, Qthrow_value);
-    }
-    MZ_GC_UNREG();
-    return NULL;
-  }
-  *(frinfo->res) = value;
-  MZ_GC_UNREG();
-  return NULL;
-}
-
-static Scheme_Object *impossible(void *ptr) {
-  fprintf(stderr, "racket-emacs Fatal internal error: impossible() reached!\n");
-  fflush(stderr);
-  abort();
-  return NULL;
-}
-
 emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
   char *filename = emacs_string_to_c_string(env, argv[0]);
   EMACS_CHECK_EXIT(env, NULL);
   //fprintf(stderr, "Pre-init\n");
   //fprintf(stderr, "Post-init\n");
+  Scheme_Object *mod = NULL;
+  Scheme_Object *val = NULL;
   Scheme_Object *res = NULL;
-  filerun_info frinfo = { filename, NULL, &res };
   
-  MZ_GC_DECL_REG(2);
+  MZ_GC_DECL_REG(3);
   MZ_GC_VAR_IN_REG(0, res);
-  MZ_GC_VAR_IN_REG(1, frinfo.sym);
+  MZ_GC_VAR_IN_REG(1, mod);
+  MZ_GC_VAR_IN_REG(2, val);
   MZ_GC_REG();
   if (argc > 1) {
-    frinfo.sym = conv_emacs_symbol_to_scheme_symbol(env, argv[1]);
-  } else {
-    frinfo.sym = scheme_make_false();
+    val = conv_emacs_symbol_to_scheme_symbol(env, argv[1]);
   }
-  with_env(env, do_eval_racket_file, impossible, &frinfo);
+  mod = scheme_make_pair(scheme_intern_symbol("file"),
+                         scheme_make_pair(scheme_make_utf8_string(filename),
+                                          scheme_null));
+  res = racket_safe_dynamic_require(env, mod, val);
   free(filename);
-  emacs_value ret = wrap_racket_value(env, *frinfo.res);
+  EMACS_CHECK_EXIT(env, NULL);
+  emacs_value ret = wrap_racket_value(env, res);
   MZ_GC_UNREG();
   return ret;
 }

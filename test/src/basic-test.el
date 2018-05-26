@@ -53,7 +53,9 @@
   (racket-emacs/pretty-print (racket-emacs/wrap-integer 2)))
 
 (ert-deftest basic-test-defracket ()
-  (defracket racket/base (racket+ . +))
+  ;;(defracket (prefix-in racket- (only-in racket/base +)))
+  ;;(pprint-macroexpand '(defracket (prefix-in racket (only-in racket/base +))))
+  (defracket (prefix-in racket (only-in racket/base +)))
   (should (eql 5 (racket+ 2 3))))
 
 ;;; basic-test.el ends here

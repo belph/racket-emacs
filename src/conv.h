@@ -40,6 +40,7 @@ Scheme_Object *conv_emacs_float_to_scheme_float(emacs_env *env, emacs_value valu
 Scheme_Object *conv_emacs_symbol_to_scheme_symbol(emacs_env *env, emacs_value value);
 Scheme_Object *conv_emacs_string_to_scheme_string(emacs_env *env, emacs_value value);
 Scheme_Object *conv_emacs_bool_to_scheme_bool(emacs_env *env, emacs_value value);
+Scheme_Object *conv_emacs_pair_to_scheme_pair(emacs_env *env, emacs_value value);
 
 
 // Racket values -> Emacs values
@@ -49,6 +50,7 @@ emacs_value conv_scheme_float_to_emacs_float(emacs_env *env, Scheme_Object *valu
 emacs_value conv_scheme_symbol_to_emacs_symbol(emacs_env *env, Scheme_Object *value);
 emacs_value conv_scheme_string_to_emacs_string(emacs_env *env, Scheme_Object *value);
 emacs_value conv_scheme_bool_to_emacs_bool(emacs_env *env, Scheme_Object *value);
+emacs_value conv_scheme_pair_to_emacs_pair(emacs_env *env, Scheme_Object *value);
 // "Smarter" conversion function which delegates to the above
 emacs_value conv_scheme_primitive_to_emacs_primitive(emacs_env *env, Scheme_Object *value);
 
