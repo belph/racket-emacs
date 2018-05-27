@@ -21,8 +21,8 @@
 ;;; Code:
 
 (require 'ert)
-(require 'racket-emacs)
 (require 'test-config)
+(require 'racket-emacs)
 
 (ert-deftest basic-test-require ()
   (should (require 'racket-emacs)))
@@ -57,6 +57,13 @@
   ;;(pprint-macroexpand '(defracket (prefix-in racket (only-in racket/base +))))
   (defracket (prefix-in racket (only-in racket/base +)))
   (should (eql 5 (racket+ 2 3))))
+
+(ert-deftest basic-test-defracket-local ()
+  (let ((+-val (and (boundp '+) (symbol-value '+)))
+        (+-func (symbol-function '+)))
+    (defracket-local (only-in racket/base +)
+      (should-not (eql +-val (symbol-value '+)))
+      (should-not (eql +-func (symbol-function '+))))))
 
 ;;; basic-test.el ends here
 

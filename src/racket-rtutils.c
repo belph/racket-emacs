@@ -5,10 +5,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
+#include <string.h>
 
 #include "racket-rt.h"
 #include "racket-rtutils.h"
 #include "emacs-c-utils.h"
+#include "hooks.h"
 
 typedef struct {
   Scheme_Config *old_config;
@@ -48,7 +50,7 @@ emacs_value wrap_racket_value(emacs_env *env, Scheme_Object *value) {
   boxed = scheme_malloc_immobile_box(value);
   SCHEME_PRINT_STR("Wrapping Racket value: ");
   SCHEME_DISPLAY(*boxed);
-  dprintf(" (ptr: %p [box: %p])", *boxed, boxed);
+  dprintf(" (ptr: %p [box: %p]) ", *boxed, boxed);
 
   emacs_value ret = env->make_user_ptr(env, wrapped_racket_value_finalizer, boxed);
   SCHEME_DISPLAYLN(*((Scheme_Object**)env->get_user_ptr(env, ret)));
@@ -615,7 +617,8 @@ Scheme_Object *expand_requires(emacs_env *env, Scheme_Object *v) {
   return ret;
 }
 
-void init_racket_rtutils(emacs_env *eenv) {
+int init_racket_rtutils(emacs_env *eenv) {
+  dprintf("init_racket_rtutils (env: %p)\n", eenv);
   MZ_REGISTER_STATIC(exn_catching_apply);
   MZ_REGISTER_STATIC(emacs_exn);
   MZ_REGISTER_STATIC(exn_p);
@@ -627,4 +630,11 @@ void init_racket_rtutils(emacs_env *eenv) {
   register_emacs_exn();
   init_exn_catching_apply();
   setup_resolve_requires(eenv);
+  run_hooks(POST_RACKETUTILS_INIT, eenv);
+  return 0;
 }
+
+RE_SETUP_HOOK("racket-rtutils",
+              POST_RACKET_INIT,
+              init_racket_rtutils)
+

@@ -6,6 +6,7 @@
 #include "racket-rtutils.h"
 #include "emacs-c-utils.h"
 #include "ffi-utils.h"
+#include "hooks.h"
 
 emacs_value Fcall_racket_func_raw(emacs_env *env, ptrdiff_t argc, emacs_value argv[], void *data) {
   fprintf(stderr, "starting Fcall_racket_func_raw\n");
@@ -255,80 +256,106 @@ static emacs_value Fexpand_requires(emacs_env *env, ptrdiff_t argc, emacs_value 
   return ret;
 }
 
-void register_ffi_utils_emacs_functions(emacs_env *env) {
-  emacs_value fun, val;
+// For macros below
+#ifdef bool
+#undef bool
+#endif
+
+#define BIND_WRAPPER(env, type_name, Ftype_name, type_doc)       \
+  EMACS_BIND_FUNCTION(env, "racket-emacs/wrap-" type_name,       \
+                      conversion_wrapper_helper,                 \
+                      1, 1,                                        \
+                      "Wrap the given Emacs " type_doc,              \
+                      conv_emacs_ ## Ftype_name ## _to_scheme_ ## Ftype_name)
+
+#define BIND_WRAPPER_SIMPLE(env, type) BIND_WRAPPER(env, #type, type, #type)
+
+#define BIND_UNWRAPPER(env, type_name, Ftype_name, type_doc)       \
+  EMACS_BIND_FUNCTION(env, "racket-emacs/unwrap-" type_name,       \
+                      conversion_unwrapper_helper,                 \
+                      1, 1,                                        \
+                      "Unwrap the given Racket " type_doc,              \
+                      conv_scheme_ ## Ftype_name ## _to_emacs_ ## Ftype_name)
+
+#define BIND_UNWRAPPER_SIMPLE(env, type) BIND_UNWRAPPER(env, #type, type, #type)
+
+#define BIND_WRAPPER_FUNCS(env, type_name, Ftype_name, type_doc) \
+  BIND_WRAPPER(env, type_name, Ftype_name, type_doc); \
+  BIND_UNWRAPPER(env, type_name, Ftype_name, type_doc)
+
+#define BIND_WRAPPER_FUNCS_SIMPLE(env, type) \
+  BIND_WRAPPER_SIMPLE(env, type); \
+  BIND_UNWRAPPER_SIMPLE(env, type)
+
+#define BIND_SCHEME_VAL(env, name, value) \
+  do {\
+    emacs_env *__env_sch = env;                 \
+    Scheme_Object *__sch_bind_val = NULL;       \
+    MZ_GC_DECL_REG(1);                          \
+    MZ_GC_VAR_IN_REG(0, __sch_bind_val);        \
+    MZ_GC_REG();                                \
+    __sch_bind_val = value;                     \
+    bind_value(__env_sch, "racket-emacs/" name, wrap_racket_value(__env_sch, __sch_bind_val)); \
+    MZ_GC_UNREG();                              \
+  } while (0)
+
+#define BIND_SCHEME_VAL_SIMPLE(env, type) \
+  BIND_SCHEME_VAL(env, #type, scheme_ ## type)
+
+static int register_ffi_utils_emacs_functions(emacs_env *env) {
+  emacs_value val;
   Scheme_Object *listelts[1];
   Scheme_Object *obj;
   MZ_GC_DECL_REG(4);
   MZ_GC_ARRAY_VAR_IN_REG(0, listelts, 1);
   MZ_GC_VAR_IN_REG(3, obj);
   MZ_GC_REG();
-  fun = env->make_function(env, 1, -2, Fcall_racket_func_raw, "Invoke the given Racket function", NULL);
-  bind_function(env, "racket-emacs/runtime/call-raw", fun);
 
-  fun = env->make_function(env, 1, 1, Fset_racket_current_directory, "Set the (current-directory) Racket parameter", NULL);
-  bind_function(env, "racket-emacs/runtime/set-current-directory", fun);
+  EMACS_BIND_FUNCTION(env, "racket-emacs/runtime/call-raw",
+                      Fcall_racket_func_raw,
+                      1, EMACS_ARGS_MANY,
+                      "Invoke the given Racket function",
+                      NULL);
 
-  fun = env->make_function(env, 1, 1, Fexpand_requires, "Expand the given (quoted) require spec", NULL);
-  bind_function(env, "racket-emacs/runtime/raw/expand-requires", fun);
-  
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket integer", conv_scheme_integer_to_emacs_integer);
-  bind_function(env, "racket-emacs/unwrap-integer", fun);
+  EMACS_BIND_FUNCTION(env, "racket-emacs/runtime/set-current-directory",
+                      Fset_racket_current_directory,
+                      1, 1,
+                      "Set the (current-directory) Racket parameter",
+                      NULL);
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket float", conv_scheme_float_to_emacs_float);
-  bind_function(env, "racket-emacs/unwrap-float", fun);
+  EMACS_BIND_FUNCTION(env, "racket-emacs/runtime/raw/expand-requires",
+                      Fexpand_requires,
+                      1, 1,
+                      "Expand the given (quoted) require spec",
+                      NULL);
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket symbol", conv_scheme_symbol_to_emacs_symbol);
-  bind_function(env, "racket-emacs/unwrap-symbol", fun);
+  EMACS_BIND_FUNCTION(env, "racket-emacs--unwrap-primitive",
+                      conversion_unwrapper_helper,
+                      1, 1,
+                      "Wrap the given Emacs primitive value, as possible",
+                      conv_scheme_primitive_to_emacs_primitive);
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket string", conv_scheme_string_to_emacs_string);
-  bind_function(env, "racket-emacs/unwrap-string", fun);
+  EMACS_BIND_FUNCTION(env, "racket-emacs/build-list",
+                      wrapped_racket_build_list,
+                      1, EMACS_ARGS_MANY,
+                      "Build a Racket list from the given arguments",
+                      NULL);
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket bool", conv_scheme_bool_to_emacs_bool);
-  bind_function(env, "racket-emacs/unwrap-bool", fun);
+  BIND_WRAPPER_FUNCS_SIMPLE(env, integer);
+  BIND_WRAPPER_FUNCS_SIMPLE(env, float);
+  BIND_WRAPPER_FUNCS_SIMPLE(env, symbol);
+  BIND_WRAPPER_FUNCS_SIMPLE(env, string);
+  BIND_WRAPPER_FUNCS_SIMPLE(env, bool);
+  BIND_WRAPPER_FUNCS(env, "cons", pair, "cons cell");
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Unwrap the given Racket cons cell", conv_scheme_pair_to_emacs_pair);
-  bind_function(env, "racket-emacs/unwrap-cons", fun);
+  BIND_SCHEME_VAL_SIMPLE(env, eof);
+  BIND_SCHEME_VAL_SIMPLE(env, null);
+  BIND_SCHEME_VAL_SIMPLE(env, true);
+  BIND_SCHEME_VAL_SIMPLE(env, false);
+  BIND_SCHEME_VAL_SIMPLE(env, void);
 
-  fun = env->make_function(env, 1, 1, conversion_unwrapper_helper, "Wrap the given Emacs primitive value, as possible", conv_scheme_primitive_to_emacs_primitive);
-  bind_function(env, "racket-emacs--unwrap-primitive", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs integer", conv_emacs_integer_to_scheme_integer);
-  bind_function(env, "racket-emacs/wrap-integer", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs float", conv_emacs_float_to_scheme_float);
-  bind_function(env, "racket-emacs/wrap-float", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs symbol", conv_emacs_symbol_to_scheme_symbol);
-  bind_function(env, "racket-emacs/wrap-symbol", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs string", conv_emacs_string_to_scheme_string);
-  bind_function(env, "racket-emacs/wrap-string", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs bool", conv_emacs_bool_to_scheme_bool);
-  bind_function(env, "racket-emacs/wrap-bool", fun);
-
-  fun = env->make_function(env, 1, 1, conversion_wrapper_helper, "Wrap the given Emacs cons cell", conv_emacs_pair_to_scheme_pair);
-  bind_function(env, "racket-emacs/wrap-cons", fun);
-
-  fun = env->make_function(env, 1, -2, wrapped_racket_build_list, "Build a Racket list from the given arguments", NULL);
-  bind_function(env, "racket-emacs/build-list", fun);
-
-  val = wrap_racket_value(env, scheme_eof);
-  bind_value(env, "racket-emacs/eof", val);
-
-  val = wrap_racket_value(env, scheme_null);
-  bind_value(env, "racket-emacs/null", val);
-
-  val = wrap_racket_value(env, scheme_true);
-  bind_value(env, "racket-emacs/true", val);
-
-  val = wrap_racket_value(env, scheme_false);
-  bind_value(env, "racket-emacs/false", val);
-
-  val = wrap_racket_value(env, scheme_void);
-  bind_value(env, "racket-emacs/void", val);
-
+  BIND_SCHEME_VAL(env, "raw/car", scheme_builtin_value("car"));
+  BIND_SCHEME_VAL(env, "raw/dynamic-require", scheme_builtin_value("dynamic-require"));
   
   val = env->intern(env, "firstval");
   //fprintf(stderr, "firstval non-global: %p\n", val);
@@ -342,15 +369,8 @@ void register_ffi_utils_emacs_functions(emacs_env *env) {
   //fprintf(stderr, "racket-tst-list global: %p\n", val);
   bind_value(env, "racket-tst-list", val);
 
-  obj = scheme_builtin_value("car");
-  val = wrap_racket_value(env, obj);
-  //fprintf(stderr, "car non-global: %p\n", val);
-  //val = env->make_global_ref(env, val);
-  //fprintf(stderr, "car global: %p\n", val);
-  bind_value(env, "racket-emacs/raw/car", val);
-
-  obj = scheme_builtin_value("dynamic-require");
-  val = wrap_racket_value(env, obj);
-  bind_value(env, "racket-emacs/raw/dynamic-require", val);
   MZ_GC_UNREG();
+  return 0;
 }
+
+RE_SETUP_HOOK("ffi-utils-init", POST_RACKETUTILS_INIT, register_ffi_utils_emacs_functions)

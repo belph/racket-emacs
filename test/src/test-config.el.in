@@ -25,6 +25,12 @@
 (defconst racket-emacs-test--data-directory
   (concat racket-emacs-test--top-src-directory "/test/data"))
 
+(let ((default-dir (concat racket-emacs-test--top-src-directory "/lisp")))
+  (normal-top-level-add-subdirs-to-load-path))
+
+(let ((default-dir (concat racket-emacs-test--top-src-directory "/test/src")))
+  (normal-top-level-add-subdirs-to-load-path))
+
 (defmacro racket-emacs-test-data-file (filename)
   `(concat racket-emacs-test--data-directory "/" ,filename))
 

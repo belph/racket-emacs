@@ -135,7 +135,7 @@ NIL values will be converted to booleans."
   (princ "\n" output-stream))
 
 (defun pprint-macroexpand (form &optional output-stream)
-  (pprint (macroexpand form) output-stream))
+  (pprint (macroexpand (macroexpand form)) output-stream))
 
 (defun racket-emacs/pretty-print (value)
   "Pretty-print VALUE to STDOUT."
@@ -146,15 +146,6 @@ NIL values will be converted to booleans."
   (racket-emacs--unwrap-primitive
    (racket-emacs/runtime/raw/expand-requires
     (racket-emacs--wrap-primitive spec))))
-
-;;(defmacro defracket (mod &rest identifiers)
-;;  "Defines IDENTIFIERS by wrapping the expored Racket values from MOD."
-;;  (let* ((mapped (mapcar (lambda (id) `',id) identifiers)))
-;;    `(dolist (bind (racket-emacs/dynamic-require ',mod . ,mapped))
-;;       (let ((out-id (car bind))
-;;             (val (cdr bind)))
-;;         (set out-id val)
-;;         (fset out-id (racket-emacs--wrapped-func val))))))
 
 (defmacro defracket (spec)
   "Import the values listed in the Racket require specification SPEC."
@@ -168,6 +159,46 @@ NIL values will be converted to booleans."
              ((eq import-type 'macro)
               (error "Macro imports are unsupported"))
              (t (error "Unknown import type: %S" (cadr bind)))))))
+
+(defmacro defracket-local (spec &rest body)
+  "Imports the values listed in the Racket require specification SPEC within the scope of BODY."
+  (declare (indent 1))
+  `(progn
+     (message "Starting binds\n")
+     (let (racket-emacs--defracket-local--binds)
+       (dolist (bind (racket-emacs/runtime/expand-requires ',spec) racket-emacs--defracket-local--binds)
+         (let ((name (car bind))
+               (import-type (cadr bind))
+               (value (cddr bind)))
+           (setq racket-emacs--defracket-local--binds
+                 (cons
+                  (cons name
+                        (cons import-type
+                              (cons (cons (boundp name) (and (boundp name) (symbol-value name)))
+                                    (symbol-function name))))
+                       racket-emacs--defracket-local--binds))
+           (cond ((eq import-type 'value)
+                  (set name value)
+                  (fset name (racket-emacs--wrapped-func value)))
+                 ((eq import-type 'macro)
+                  (error "Macro imports are unsupported"))
+                 (t (error "Unknown import type: %S" (cadr bind))))))
+       (message "\nFinished binding values\n")
+       (unwind-protect (progn ,@body)
+         (dolist (bind racket-emacs--defracket-local--binds)
+           (let ((name (car bind))
+                 (import-type (cadr bind))
+                 (value (caddr bind))
+                 (fvalue (cdddr bind)))
+             (message "Rolling back: %S" name)
+             (cond ((eq import-type 'value)
+                    (if (car value)
+                        (set name (cdr value))
+                      (makunbound name))
+                    (fset name fvalue))
+                   ((eq import-type 'macro)
+                    (error "Macro imports are unsupported"))
+                   (t (error "Unknown import type: %S" (cadr bind))))))))))
 
 (defmacro let-racket (binds &rest body)
   "Create local bindings of the Racket values specified in BINDS in the scope of BODY."

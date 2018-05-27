@@ -43,7 +43,7 @@ Scheme_Object *expand_requires(emacs_env *env, Scheme_Object *v);
 // val == NULL is the same as #f
 Scheme_Object *racket_safe_dynamic_require(emacs_env *env, Scheme_Object *mod, Scheme_Object *val);
 
-void init_racket_rtutils(emacs_env *eenv);
+int init_racket_rtutils(emacs_env *eenv);
 
 #define RETHROW_EMACS_ERROR(env)                \
   do {                                            \

@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <re-macros.h>
 #include <emacs-module.h>
 
 #include "emacs-c-utils.h"
@@ -201,6 +202,7 @@ bool emacs_is_user_ptr(emacs_env *env, emacs_value value) {
 void bind_value(emacs_env *env, const char *name, emacs_value Qval) {
   /* Set the function cell of the symbol named NAME to QVAL using
      the 'set' function.  */
+  dprintf("Binding Emacs value: %s\n", name);
 
   /* Convert the strings to symbols by interning them */
   emacs_value Qset = env->intern (env, "set");
@@ -217,6 +219,7 @@ void bind_value(emacs_env *env, const char *name, emacs_value Qval) {
 void bind_function(emacs_env *env, const char *name, emacs_value Sfun) {
   /* Set the function cell of the symbol named NAME to SFUN using
      the 'fset' function.  */
+  dprintf("Binding Emacs function: %s\n", name);
 
   /* Convert the strings to symbols by interning them */
   emacs_value Qfset = env->intern (env, "fset");

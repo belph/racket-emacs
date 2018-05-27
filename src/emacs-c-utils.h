@@ -27,11 +27,15 @@
 
 #ifndef RKT_EMACS_EMACS_C_UTILS_H
 #define RKT_EMACS_EMACS_C_UTILS_H
+#include <string.h>
 #include <emacs-module.h>
 
 #define STRLEN(x) ((sizeof(x) / sizeof(char)) - 1)
 // https://stackoverflow.com/a/2124433
 #define NUMEMACS_ARGS(...)  (sizeof((emacs_value[]){NULL, ##__VA_ARGS__})/sizeof(emacs_value) - 1)
+
+#define EMACS_ARGS_UNEVALED (-1)
+#define EMACS_ARGS_MANY (-2)
 
 #define EMACS_CHECK_EXIT(env, retval)                                   \
   do {                                                                  \
@@ -59,11 +63,29 @@
     ___eenv_str->make_string(___eenv_str, __s, __len);           \
   })
 
+#define EMACS_STRING_SLOW(env, s) \
+  ({                                                         \
+    emacs_env *___eenv_str = (env);                                 \
+    const char *__s = (s); /* does not need to be string literal */ \
+    ptrdiff_t __len = strlen(__s);                               \
+    ___eenv_str->make_string(___eenv_str, __s, __len);           \
+  })
+
 #define EMACS_EXN(env, tag, value) \
   do {                             \
-    emacs_env *___eenv_exn = env;                                   \
-    emacs_value Qthrow_tag = ___eenv_exn->intern(___eenv_exn, tag);     \
-    emacs_value Qthrow_value = EMACS_STRING(___eenv_exn, value);        \
+    emacs_env *___eenv_exn = (env);                                     \
+    emacs_value Qthrow_tag = ___eenv_exn->intern(___eenv_exn, (tag));   \
+    emacs_value Qthrow_value = EMACS_STRING(___eenv_exn, value);      \
+    if (___eenv_exn->non_local_exit_check(___eenv_exn) == emacs_funcall_exit_return) { \
+      ___eenv_exn->non_local_exit_throw(___eenv_exn, Qthrow_tag, Qthrow_value); \
+    }                                                                   \
+  } while (0)
+
+#define EMACS_EXN_SLOW(env, tag, value) \
+  do {                             \
+    emacs_env *___eenv_exn = (env);                                     \
+    emacs_value Qthrow_tag = ___eenv_exn->intern(___eenv_exn, (tag));   \
+    emacs_value Qthrow_value = EMACS_STRING_SLOW(___eenv_exn, (value)); \
     if (___eenv_exn->non_local_exit_check(___eenv_exn) == emacs_funcall_exit_return) { \
       ___eenv_exn->non_local_exit_throw(___eenv_exn, Qthrow_tag, Qthrow_value); \
     }                                                                   \
@@ -73,6 +95,18 @@
   do {                                                    \
     emacs_value __msg_args[] = {__VA_ARGS__};             \
     emacs_message(env, format, NUMEMACS_ARGS(__VA_ARGS__), __msg_args); \
+  } while (0)
+
+#define EMACS_BIND_FUNCTION(env, name, func, minargs, maxargs, doc, data) \
+  do { \
+    emacs_env *__env_bind_func = (env);         \
+    emacs_value __fun = __env_bind_func->make_function(__env_bind_func, \
+                                                       minargs,         \
+                                                       maxargs,         \
+                                                       func,            \
+                                                       doc,             \
+                                                       data);           \
+    bind_function(__env_bind_func, name, __fun);                        \
   } while (0)
 
 /**

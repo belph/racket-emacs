@@ -28,6 +28,7 @@
 #include "conv.h"
 #include "racket-rt.h"
 #include "racket-rtutils.h"
+#include "hooks.h"
 
 // A large portion of this file is taken from VIM's mzscheme (i.e. Racket) module,
 // as it addresses many nuances of portability and alternate Racket configurations.
@@ -353,7 +354,6 @@ static int racket_startup(emacs_env *eenv) {
     MZ_GC_UNREG();
   }
 
-  init_racket_rtutils(eenv);
   /* redirect output */
   //scheme_console_output = do_output;
   //scheme_console_printf = do_printf;
@@ -376,8 +376,8 @@ static int racket_startup(emacs_env *eenv) {
 			 wrapped_emacs_env_fixup_proc,
 			 true, true);
 #endif
-  
-  return 0;
+  return run_hooks(POST_RACKET_INIT, eenv);
+  //init_racket_rtutils(eenv);
 }
 
 int racket_init(emacs_env *eenv) {
@@ -437,3 +437,4 @@ emacs_value Feval_racket_file(emacs_env *env, ptrdiff_t argc, emacs_value argv[]
   return ret;
 }
 
+RE_SETUP_HOOK("racket-rt", MODULE_INIT, racket_init)
