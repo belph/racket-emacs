@@ -28,3 +28,5 @@ m4/libtool.m4
 m4/lt*
 !test/Makefile.in
 test/src/test-config.el
+test/.dir-locals.el
+

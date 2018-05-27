@@ -1,0 +1,3 @@
+;; @configure_input@
+((flycheck-emacs-lisp-load-path . @EMACS_TEST_LOAD_PATH@))
+

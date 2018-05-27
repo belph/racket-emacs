@@ -125,9 +125,14 @@ AM_COND_IF([RACKET_GC_ISCGC_TST], [
   AC_DEFINE(RACKET_GC_ISCGC, [1], [Whether the default GC is the CGC implementation])
 ], [])
 
+CHECK_EMACS()
+CHECK_EMACS_MODULE_SUPPORT()
+EXTRA_EMACS_DIRS="\"$(pwd)/lisp\" \"$(pwd)/src/.libs\" \"$(pwd)/test/src\""
+GET_EMACS_LOAD_PATH($EXTRA_EMACS_DIRS)
+
 SECTION_TITLE([yellow], [Generating files])
 dnl Create Makefile
-AC_CONFIG_FILES([Makefile src/Makefile lisp/Makefile test/Makefile test/src/test-config.el])
+AC_CONFIG_FILES([Makefile src/Makefile lisp/Makefile test/Makefile test/src/test-config.el test/.dir-locals.el])
 AC_OUTPUT
 
 AS_ECHO(["
